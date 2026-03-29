@@ -373,16 +373,40 @@ fn draw_context_panel(f: &mut Frame, app: &App, area: Rect) {
         height: area.height.saturating_sub(2),
     };
 
-    // Split: left = sparkline graph, right = context bars
+    // Compact mode: single-line text summary when too short for graph
+    if inner.height <= 1 {
+        let ticks_per_min = 30usize;
+        let rates: Vec<f64> = app.token_rates.iter().copied().collect();
+        let tokens_per_min: f64 = rates.iter().rev().take(ticks_per_min).sum();
+        let total: u64 = app.sessions.iter().map(|s| s.total_tokens()).sum();
+        let active = app.sessions.iter()
+            .filter(|s| matches!(s.status, crate::model::SessionStatus::Working))
+            .count();
+
+        let line = Line::from(vec![
+            Span::styled(" Rate ", Style::default().fg(GRAPH_TEXT)),
+            Span::styled(
+                format!("{}/min", fmt_tokens(tokens_per_min as u64)),
+                Style::default().fg(grad_at(&cpu_grad, 50.0)),
+            ),
+            Span::styled("  Total ", Style::default().fg(GRAPH_TEXT)),
+            Span::styled(fmt_tokens(total), Style::default().fg(MAIN_FG)),
+            Span::styled(
+                format!("  {} active", active),
+                Style::default().fg(PROC_MISC),
+            ),
+        ]);
+        f.render_widget(Paragraph::new(line), inner);
+        return;
+    }
+
+    // Full mode: sparkline graph + context bars
     let halves = Layout::default()
         .direction(Direction::Horizontal)
         .constraints([Constraint::Percentage(65), Constraint::Percentage(35)])
         .split(inner);
 
-    // ── Left: token rate braille sparkline graph ──
     draw_context_sparkline(f, app, halves[0], &cpu_grad);
-
-    // ── Right: per-session context bars (table) ──
     draw_context_bars(f, app, halves[1], &cpu_grad);
 }
 
@@ -914,6 +938,21 @@ fn draw_sessions_panel(f: &mut Frame, app: &App, area: Rect) {
     let proc_grad = make_gradient(PROC_START, PROC_MID, PROC_END);
     let mut rows = Vec::new();
 
+    // Adaptive columns — priority order (last hidden first):
+    //   always: marker, AI, Project, Status, Context
+    //   w>=80:  + Session, Summary, Tokens
+    //   w>=100: + Model
+    //   w>=110: + Memory, Turn
+    //   w>=120: + Pid
+    let w = inner.width;
+    let show_pid = w >= 120;
+    let show_memory = w >= 110;
+    let show_turn = w >= 110;
+    let show_model = w >= 100;
+    let show_tokens = w >= 80;
+    let show_session = w >= 80;
+    let show_summary = w >= 80;
+
     for (i, session) in app.sessions.iter().enumerate() {
         let selected = i == app.selected;
         let marker = if selected { "►" } else { " " };
@@ -922,9 +961,7 @@ fn draw_sessions_panel(f: &mut Frame, app: &App, area: Rect) {
             "claude" => ("*CC", Color::Rgb(217, 119, 87)),  // #D97757 terracotta
             "codex"  => (">CD", Color::Rgb(122, 157, 255)), // #7A9DFF periwinkle
             other => {
-                // Future agents: uppercase first 3 chars of name
                 let fallback: String = other.chars().take(3).collect::<String>().to_uppercase();
-                // Leak to get 'static — bounded by number of distinct agent types
                 (Box::leak(fallback.into_boxed_str()) as &str, INACTIVE_FG)
             }
         };
@@ -961,120 +998,175 @@ fn draw_sessions_panel(f: &mut Frame, app: &App, area: Rect) {
             &session.session_id
         };
 
-        // Summary column: LLM summary > pending > raw prompt > "—"
         let summary_col = app.session_summary(session);
 
-        rows.push(
-            Row::new(vec![
-                Cell::from(Span::styled(marker, Style::default().fg(HI_FG))),
-                Cell::from(Span::styled(agent_label, Style::default().fg(agent_color))),
-                Cell::from(Span::styled(
-                    format!("{}", session.pid),
-                    Style::default().fg(INACTIVE_FG),
-                )),
-                Cell::from(Span::styled(
-                    truncate_str(&session.project_name, 14),
-                    Style::default().fg(TITLE),
-                )),
-                Cell::from(Span::styled(
-                    sid_short.to_string(),
-                    Style::default().fg(SESSION_ID),
-                )),
-                Cell::from(Span::styled(
-                    summary_col,
-                    Style::default().fg(MAIN_FG),
-                )),
-                Cell::from(Span::styled(status_icon, Style::default().fg(status_color))),
-                Cell::from(Span::styled(
-                    truncate_str(&model_short, 10),
-                    Style::default().fg(if model_short == "-" { INACTIVE_FG } else { GRAPH_TEXT }),
-                )),
-                Cell::from(Span::styled(
-                    format!("{:>3.0}%", session.context_percent),
-                    Style::default().fg(ctx_color),
-                )),
-                Cell::from(Span::styled(
-                    fmt_tokens(session.total_tokens()),
-                    Style::default().fg(MAIN_FG),
-                )),
-                Cell::from(Span::styled(
-                    if session.mem_mb > 0 {
-                        format!("{}M", session.mem_mb)
-                    } else {
-                        "—".to_string()
-                    },
-                    Style::default().fg(GRAPH_TEXT),
-                )),
-                Cell::from(Span::styled(
-                    format!("{}", session.turn_count),
-                    Style::default().fg(GRAPH_TEXT),
-                )),
-            ])
-            .style(row_style)
-            .height(1),
-        );
+        // Build cells in priority order: always → conditional
+        let mut cells = vec![
+            Cell::from(Span::styled(marker, Style::default().fg(HI_FG))),
+            Cell::from(Span::styled(agent_label, Style::default().fg(agent_color))),
+        ];
+        if show_pid {
+            cells.push(Cell::from(Span::styled(
+                format!("{}", session.pid),
+                Style::default().fg(INACTIVE_FG),
+            )));
+        }
+        cells.push(Cell::from(Span::styled(
+            truncate_str(&session.project_name, 14),
+            Style::default().fg(TITLE),
+        )));
+        if show_session {
+            cells.push(Cell::from(Span::styled(
+                sid_short.to_string(),
+                Style::default().fg(SESSION_ID),
+            )));
+        }
+        if show_summary {
+            cells.push(Cell::from(Span::styled(
+                summary_col,
+                Style::default().fg(MAIN_FG),
+            )));
+        }
+        cells.push(Cell::from(Span::styled(status_icon, Style::default().fg(status_color))));
+        if show_model {
+            cells.push(Cell::from(Span::styled(
+                truncate_str(&model_short, 10),
+                Style::default().fg(if model_short == "-" { INACTIVE_FG } else { GRAPH_TEXT }),
+            )));
+        }
+        cells.push(Cell::from(Span::styled(
+            format!("{:>3.0}%", session.context_percent),
+            Style::default().fg(ctx_color),
+        )));
+        if show_tokens {
+            cells.push(Cell::from(Span::styled(
+                fmt_tokens(session.total_tokens()),
+                Style::default().fg(MAIN_FG),
+            )));
+        }
+        if show_memory {
+            cells.push(Cell::from(Span::styled(
+                if session.mem_mb > 0 {
+                    format!("{}M", session.mem_mb)
+                } else {
+                    "—".to_string()
+                },
+                Style::default().fg(GRAPH_TEXT),
+            )));
+        }
+        if show_turn {
+            cells.push(Cell::from(Span::styled(
+                format!("{}", session.turn_count),
+                Style::default().fg(GRAPH_TEXT),
+            )));
+        }
 
-        // 2nd line: current task (last tool_use = currently running)
-        // Placed in Summary column (index 5) so it uses the wide Min() space
-        let task_text = session.current_tasks.last().map(|s| s.as_str()).unwrap_or("");
-        rows.push(
-            Row::new(vec![
-                Cell::from(""),
-                Cell::from(""),
-                Cell::from(""),
-                Cell::from(""),
-                Cell::from(""),
+        rows.push(Row::new(cells).style(row_style).height(1));
+
+        // 2nd line: task text in the widest column position
+        let total_cols = 4 // marker + AI + Project + Status + Context (always)
+            + show_pid as usize + show_session as usize + show_summary as usize
+            + show_model as usize + show_tokens as usize
+            + show_memory as usize + show_turn as usize;
+        // Task text column: Summary if visible, otherwise Project
+        let task_col = 2 + show_pid as usize + 1 + show_session as usize; // after Project
+        let task_idx = if show_summary { task_col } else { 2 + show_pid as usize }; // Project col
+        let task_cells: Vec<Cell> = (0..total_cols).map(|j| {
+            if j == task_idx {
+                let task_text = session.current_tasks.last().map(|s| s.as_str()).unwrap_or("");
                 Cell::from(Span::styled(
                     format!("└─ {}", task_text),
                     Style::default().fg(GRAPH_TEXT),
-                )),
-                Cell::from(""),
-                Cell::from(""),
-                Cell::from(""),
-                Cell::from(""),
-                Cell::from(""),
-                Cell::from(""),
-            ])
-            .height(1),
-        );
+                ))
+            } else {
+                Cell::from("")
+            }
+        }).collect();
+        rows.push(Row::new(task_cells).height(1));
     }
 
     let header_style = Style::default()
         .fg(MAIN_FG)
         .add_modifier(Modifier::BOLD);
-    let header = Row::new(vec![
+    let mut header_cells = vec![
         Cell::from(""),
         Cell::from(Span::styled("AI", header_style)),
-        Cell::from(Span::styled("Pid", header_style)),
-        Cell::from(Span::styled("Project", header_style)),
-        Cell::from(Span::styled("Session", header_style)),
-        Cell::from(Span::styled("Summary", header_style)),
-        Cell::from(Span::styled("Status", header_style)),
-        Cell::from(Span::styled("Model", header_style)),
-        Cell::from(Span::styled("Context", header_style)),
-        Cell::from(Span::styled("Tokens", header_style)),
-        Cell::from(Span::styled("Memory", header_style)),
-        Cell::from(Span::styled("Turn", header_style)),
-    ])
-    .height(1);
-
-    let widths = [
-        Constraint::Length(1),   // marker
-        Constraint::Length(3),   // agent label (*CC/>CD)
-        Constraint::Length(6),   // pid
-        Constraint::Length(14),  // project
-        Constraint::Length(9),   // session id (8 chars + pad)
-        Constraint::Min(10),     // summary (fills remaining space)
-        Constraint::Length(8),   // status
-        Constraint::Length(8),   // model
-        Constraint::Length(7),   // context
-        Constraint::Length(7),   // tokens
-        Constraint::Length(8),   // memory
-        Constraint::Length(4),   // turn
     ];
+    if show_pid {
+        header_cells.push(Cell::from(Span::styled("Pid", header_style)));
+    }
+    header_cells.push(Cell::from(Span::styled("Project", header_style)));
+    if show_session {
+        header_cells.push(Cell::from(Span::styled("Session", header_style)));
+    }
+    if show_summary {
+        header_cells.push(Cell::from(Span::styled("Summary", header_style)));
+    }
+    header_cells.push(Cell::from(Span::styled("Status", header_style)));
+    if show_model {
+        header_cells.push(Cell::from(Span::styled("Model", header_style)));
+    }
+    header_cells.push(Cell::from(Span::styled("Context", header_style)));
+    if show_tokens {
+        header_cells.push(Cell::from(Span::styled("Tokens", header_style)));
+    }
+    if show_memory {
+        header_cells.push(Cell::from(Span::styled("Memory", header_style)));
+    }
+    if show_turn {
+        header_cells.push(Cell::from(Span::styled("Turn", header_style)));
+    }
+    let header = Row::new(header_cells).height(1);
+
+    let mut widths_vec: Vec<Constraint> = vec![
+        Constraint::Length(1),   // marker
+        Constraint::Length(3),   // agent label
+    ];
+    if show_pid {
+        widths_vec.push(Constraint::Length(6));   // pid
+    }
+    widths_vec.push(if show_summary { Constraint::Length(14) } else { Constraint::Min(10) }); // project (expands when no summary)
+    if show_session {
+        widths_vec.push(Constraint::Length(9));   // session id
+    }
+    if show_summary {
+        widths_vec.push(Constraint::Min(10));     // summary
+    }
+    widths_vec.push(Constraint::Length(8));   // status
+    if show_model {
+        widths_vec.push(Constraint::Length(8));   // model
+    }
+    widths_vec.push(Constraint::Length(7));   // context
+    if show_tokens {
+        widths_vec.push(Constraint::Length(7));   // tokens
+    }
+    if show_memory {
+        widths_vec.push(Constraint::Length(8));   // memory
+    }
+    if show_turn {
+        widths_vec.push(Constraint::Length(4));   // turn
+    }
 
     // Scroll: each session = 2 rows. Ensure selected session is visible.
-    let visible_rows = panel_chunks[0].height.saturating_sub(1) as usize; // -1 for header
+    let total_rows = app.sessions.len() * 2;
+    let needs_scroll = total_rows > panel_chunks[0].height.saturating_sub(1) as usize;
+
+    // Split table area into [table | scrollbar(1)] when scrollable
+    let table_area;
+    let scrollbar_area: Option<Rect>;
+    if needs_scroll && panel_chunks[0].width > 2 {
+        let hsplit = Layout::default()
+            .direction(Direction::Horizontal)
+            .constraints([Constraint::Min(1), Constraint::Length(1)])
+            .split(panel_chunks[0]);
+        table_area = hsplit[0];
+        scrollbar_area = Some(hsplit[1]);
+    } else {
+        table_area = panel_chunks[0];
+        scrollbar_area = None;
+    }
+
+    let visible_rows = table_area.height.saturating_sub(1) as usize; // -1 for header
     let selected_row_start = app.selected * 2;
     let selected_row_end = selected_row_start + 2;
     let scroll_offset = if selected_row_end > visible_rows {
@@ -1088,8 +1180,44 @@ fn draw_sessions_panel(f: &mut Frame, app: &App, area: Rect) {
         Vec::new()
     };
 
-    let table = Table::new(visible, widths).header(header);
-    f.render_widget(table, panel_chunks[0]);
+    let table = Table::new(visible, widths_vec).header(header);
+    f.render_widget(table, table_area);
+
+    // ── Scrollbar column (dedicated 1-char width, btop-style) ──
+    if let Some(sb) = scrollbar_area {
+        let bar_h = sb.height as usize;
+        if bar_h > 0 {
+            let thumb_size = ((visible_rows as f64 / total_rows as f64) * bar_h as f64)
+                .ceil().max(1.0) as usize;
+            let thumb_size = thumb_size.min(bar_h);
+            let thumb_pos = if total_rows > visible_rows {
+                ((scroll_offset as f64 / (total_rows - visible_rows) as f64)
+                    * (bar_h - thumb_size) as f64)
+                    .round() as usize
+            } else {
+                0
+            };
+
+            let buf = f.buffer_mut();
+            for i in 0..bar_h {
+                let y = sb.y + i as u16;
+                let (ch, color) = if i >= thumb_pos && i < thumb_pos + thumb_size {
+                    ("┃", MAIN_FG)
+                } else {
+                    ("│", DIV_LINE)
+                };
+                buf[(sb.x, y)].set_symbol(ch).set_fg(color);
+            }
+
+            // ↑/↓ arrows at edges when more content exists
+            if scroll_offset > 0 {
+                buf[(sb.x, sb.y)].set_symbol("↑").set_fg(PROC_BOX);
+            }
+            if scroll_offset + visible_rows < total_rows {
+                buf[(sb.x, sb.y + sb.height - 1)].set_symbol("↓").set_fg(PROC_BOX);
+            }
+        }
+    }
 
     // ── Detail section for selected session (full-width Paragraph, not Table) ──
     if let Some(session) = app.sessions.get(app.selected) {
