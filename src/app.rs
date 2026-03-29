@@ -1,5 +1,5 @@
 use crate::collector::{MultiCollector, read_rate_limits};
-use crate::model::{AgentSession, RateLimitInfo, SessionStatus};
+use crate::model::{AgentSession, OrphanPort, RateLimitInfo, SessionStatus};
 use std::collections::{HashMap, HashSet, VecDeque};
 use std::sync::mpsc;
 
@@ -46,6 +46,8 @@ pub struct App {
     /// Tuple: (session_id, prompt, maybe_summary).
     summary_rx: mpsc::Receiver<(String, String, Option<String>)>,
     summary_tx: mpsc::Sender<(String, String, Option<String>)>,
+    /// Ports left open by processes whose parent sessions have ended.
+    pub orphan_ports: Vec<OrphanPort>,
 }
 
 impl App {
@@ -67,11 +69,13 @@ impl App {
             summary_retries: HashMap::new(),
             summary_rx: rx,
             summary_tx: tx,
+            orphan_ports: Vec::new(),
         }
     }
 
     pub fn tick(&mut self) {
         self.sessions = self.collector.collect();
+        self.orphan_ports = self.collector.orphan_ports.clone();
         if self.selected >= self.sessions.len() && !self.sessions.is_empty() {
             self.selected = self.sessions.len() - 1;
         }
@@ -83,7 +87,7 @@ impl App {
         let mut rate: f64 = 0.0;
         for s in &self.sessions {
             let key = (s.agent_cli.to_string(), s.session_id.clone());
-            let total = s.total_tokens();
+            let total = s.active_tokens();
             let prev = self.prev_tokens.get(&key).copied().unwrap_or(total);
             rate += total.saturating_sub(prev) as f64;
             self.prev_tokens.insert(key, total);
@@ -98,6 +102,10 @@ impl App {
         if self.rate_limits.is_empty() || self.rate_limit_counter >= 5 {
             self.rate_limit_counter = 0;
             self.rate_limits = read_rate_limits();
+            // Merge Codex rate limits from JSONL parsing (no extra I/O needed)
+            if let Some(codex_rl) = self.collector.codex_rate_limit() {
+                self.rate_limits.push(codex_rl.clone());
+            }
         } else {
             self.rate_limit_counter += 1;
         }
@@ -185,6 +193,39 @@ impl App {
         let _ = std::process::Command::new("kill")
             .args(["-9", &pid.to_string()])
             .output();
+        self.tick();
+    }
+
+    /// Kill all orphan port processes (Shift+X).
+    /// Does a fresh port scan and validates PID identity + port ownership
+    /// immediately before sending any signals to avoid PID reuse / stale cache issues.
+    pub fn kill_orphan_ports(&mut self) {
+        use crate::collector::process::get_listening_ports;
+
+        // Fresh port scan right now — don't rely on cached data
+        let fresh_ports = get_listening_ports();
+
+        for orphan in &self.orphan_ports {
+            // 1. Verify PID still listens on the expected port
+            let still_listening = fresh_ports.get(&orphan.pid)
+                .map_or(false, |ports| ports.contains(&orphan.port));
+            if !still_listening {
+                continue;
+            }
+            // 2. Verify PID still runs the expected command (full match, not substring)
+            if let Ok(output) = std::process::Command::new("ps")
+                .args(["-p", &orphan.pid.to_string(), "-o", "command="])
+                .output()
+            {
+                let current_cmd = String::from_utf8_lossy(&output.stdout).trim().to_string();
+                if current_cmd == orphan.command {
+                    let _ = std::process::Command::new("kill")
+                        .args([&orphan.pid.to_string()])
+                        .output();
+                }
+            }
+        }
+        // Re-collect to reflect changes
         self.tick();
     }
 
@@ -287,6 +328,7 @@ fn generate_summary(prompt: &str) -> Option<String> {
 
     let mut child = match Command::new("claude")
         .args(["--print", "-"])
+        .current_dir(std::env::temp_dir())
         .stdin(Stdio::piped())
         .stdout(Stdio::piped())
         .stderr(Stdio::null())
@@ -362,7 +404,19 @@ fn cache_path() -> std::path::PathBuf {
 fn load_summary_cache() -> HashMap<String, String> {
     let path = cache_path();
     match std::fs::read_to_string(&path) {
-        Ok(content) => serde_json::from_str(&content).unwrap_or_default(),
+        Ok(content) => {
+            let mut cache: HashMap<String, String> =
+                serde_json::from_str(&content).unwrap_or_default();
+            // Purge entries polluted by generate_summary's own claude --print calls
+            let before = cache.len();
+            cache.retain(|_, v| !v.contains("You are a conversation tit"));
+            if cache.len() < before {
+                // Persist cleaned cache
+                let _ = std::fs::create_dir_all(cache_dir());
+                let _ = std::fs::write(&path, serde_json::to_string(&cache).unwrap_or_default());
+            }
+            cache
+        }
         Err(_) => HashMap::new(),
     }
 }

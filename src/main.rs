@@ -68,6 +68,7 @@ fn run_app(terminal: &mut Terminal<CrosstermBackend<io::Stdout>>) -> io::Result<
                         KeyCode::Down | KeyCode::Char('j') => app.select_next(),
                         KeyCode::Up | KeyCode::Char('k') => app.select_prev(),
                         KeyCode::Char('x') => app.kill_selected(),
+                        KeyCode::Char('X') => app.kill_orphan_ports(),
                         KeyCode::Enter => { app.jump_to_session(); },
                         _ => {}
                     }
