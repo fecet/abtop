@@ -774,11 +774,14 @@ fn draw_sessions_panel(f: &mut Frame, app: &App, area: Rect) {
         let model_short = shorten_model(&session.model);
         let ctx_color = grad_at(&proc_grad, session.context_percent);
 
+        let is_done = matches!(session.status, crate::model::SessionStatus::Done);
         let row_style = if selected {
             Style::default()
                 .bg(SELECTED_BG)
                 .fg(SELECTED_FG)
                 .add_modifier(Modifier::BOLD)
+        } else if is_done {
+            Style::default().fg(INACTIVE_FG)
         } else {
             Style::default()
         };
@@ -815,7 +818,7 @@ fn draw_sessions_panel(f: &mut Frame, app: &App, area: Rect) {
                 Cell::from(Span::styled(status_icon, Style::default().fg(status_color))),
                 Cell::from(Span::styled(
                     truncate_str(&model_short, 10),
-                    Style::default().fg(GRAPH_TEXT),
+                    Style::default().fg(if model_short == "-" { INACTIVE_FG } else { GRAPH_TEXT }),
                 )),
                 Cell::from(Span::styled(
                     format!("{:>3.0}%", session.context_percent),
@@ -930,7 +933,31 @@ fn draw_sessions_panel(f: &mut Frame, app: &App, area: Rect) {
         let has_children = !session.children.is_empty();
         let has_subagents = !session.subagents.is_empty();
 
-        if has_children || has_subagents {
+        if !has_children && !has_subagents {
+            // No children or subagents — show session info summary
+            let mut lines = Vec::new();
+            lines.push(Line::from(Span::styled(
+                format!(" SESSION (►{} · {})", session.pid, &session.project_name),
+                Style::default().fg(TITLE).add_modifier(Modifier::BOLD),
+            )));
+            if !session.cwd.is_empty() {
+                lines.push(Line::from(vec![
+                    Span::styled("  cwd  ", Style::default().fg(GRAPH_TEXT)),
+                    Span::styled(&*session.cwd, Style::default().fg(MAIN_FG)),
+                ]));
+            }
+            if !session.initial_prompt.is_empty() {
+                let max_w = (detail_body.width as usize).saturating_sub(9);
+                lines.push(Line::from(vec![
+                    Span::styled("  task ", Style::default().fg(GRAPH_TEXT)),
+                    Span::styled(
+                        truncate_str(&session.initial_prompt, max_w),
+                        Style::default().fg(MAIN_FG),
+                    ),
+                ]));
+            }
+            f.render_widget(Paragraph::new(lines), detail_body);
+        } else if has_children || has_subagents {
             let body_chunks = if has_children && has_subagents {
                 Layout::default()
                     .direction(Direction::Horizontal)
@@ -1066,25 +1093,26 @@ fn draw_sessions_panel(f: &mut Frame, app: &App, area: Rect) {
             } else {
                 GRAPH_TEXT
             };
-            let footer_lines = vec![
-                Line::from(""),
-                Line::from(Span::styled(
+            let mut footer_lines = vec![Line::from("")];
+            // MEM line only for Claude Code sessions (Codex has no memory system)
+            if session.agent_cli == "claude" {
+                footer_lines.push(Line::from(Span::styled(
                     format!(
                         " MEM {} files · {}/200 lines",
                         session.mem_file_count, session.mem_line_count
                     ),
                     Style::default().fg(mem_color),
-                )),
-                Line::from(Span::styled(
-                    format!(
-                        " {} · {} · {} turns",
-                        session.version,
-                        session.elapsed_display(),
-                        session.turn_count
-                    ),
-                    Style::default().fg(INACTIVE_FG),
-                )),
-            ];
+                )));
+            }
+            footer_lines.push(Line::from(Span::styled(
+                format!(
+                    " {} · {} · {} turns",
+                    session.version,
+                    session.elapsed_display(),
+                    session.turn_count
+                ),
+                Style::default().fg(INACTIVE_FG),
+            )));
             f.render_widget(Paragraph::new(footer_lines), detail_footer);
         }
     }
