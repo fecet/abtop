@@ -1,12 +1,19 @@
 # abtop
 
-A monitor for AI coding agents.
+**Like htop, but for your AI coding agents.**
 
-Inspired by [htop](https://github.com/htop-dev/htop) and [btop](https://github.com/aristocratos/btop).
+See every Claude Code and Codex CLI session at a glance — token usage, context window %, rate limits, child processes, open ports, and more.
 
 ![demo](demo.gif)
 
-Currently supports **Claude Code** and **Codex CLI**.
+## Why
+
+- Running 3+ agents across projects? See them all in one screen.
+- Hitting rate limits? Watch your quota in real-time.
+- Agent spawned a server and forgot to kill it? Orphan port detection.
+- Context window filling up? Per-session % bars with warnings.
+
+All read-only. No API keys. No network calls.
 
 ## Install
 
@@ -36,7 +43,8 @@ Pre-built binaries for all platforms are available on the [GitHub Releases](http
 
 ```bash
 abtop          # Launch TUI
-abtop --once   # Print snapshot and exit (debug mode)
+abtop --once   # Print snapshot and exit
+abtop --setup  # Install rate limit collection hook
 ```
 
 ## Supported Agents
@@ -44,19 +52,15 @@ abtop --once   # Print snapshot and exit (debug mode)
 | Feature | Claude Code | Codex CLI |
 |---------|:-----------:|:---------:|
 | Session Discovery | ✅ | ✅ |
-| Transcript Parsing | ✅ | ✅ |
 | Token Tracking | ✅ | ✅ |
 | Context Window % | ✅ | ✅ |
 | Status Detection | ✅ | ✅ |
 | Current Task | ✅ | ✅ |
-| Subagents | ✅ | ❌ |
-| Memory Status | ✅ | ❌ |
 | Rate Limit | ✅ | ✅ |
 | Git Status | ✅ | ✅ |
 | Children / Ports | ✅ | ✅ |
-| Done Detection | ✅ | ✅ |
-| Cache Tokens | ✅ | ✅ |
-| Initial Prompt | ❌ | ✅ |
+| Subagents | ✅ | ❌ |
+| Memory Status | ✅ | ❌ |
 
 ## Key Bindings
 
@@ -68,13 +72,6 @@ abtop --once   # Print snapshot and exit (debug mode)
 | `1`–`4` | Toggle panel visibility |
 | `q` | Quit |
 | `r` | Force refresh |
-
-## Tech Stack
-
-- **Rust** (2021 edition)
-- **ratatui** + **crossterm** for TUI
-- **tokio** for async runtime
-- **serde** + **serde_json** for JSONL parsing
 
 ## Privacy
 
