@@ -457,8 +457,13 @@ fn parse_codex_jsonl(path: &Path) -> Option<CodexJSONLResult> {
                             result.last_context_tokens = inp + cache;
                             result.token_history.push(inp + out + cache);
                         }
+                        // Context window may also appear inside info
+                        if let Some(cw) = info["model_context_window"].as_u64() {
+                            result.context_window = cw;
+                        }
                         // Rate limits: primary = 5h window, secondary = 7d window
-                        let rl = &info["rate_limits"];
+                        // Lives at payload.rate_limits (NOT inside info)
+                        let rl = &payload["rate_limits"];
                         if rl.is_object() {
                             let primary = &rl["primary"];
                             let secondary = &rl["secondary"];

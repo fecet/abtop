@@ -532,66 +532,92 @@ fn draw_quota_panel(f: &mut Frame, app: &App, area: Rect) {
     };
 
     let avail_h = inner.height as usize;
-    let avail_w = inner.width as usize;
-    let mut lines: Vec<Line> = Vec::new();
 
-    if app.rate_limits.is_empty() {
-        lines.push(Line::from(Span::styled(" QUOTA", Style::default().fg(TITLE).add_modifier(Modifier::BOLD))));
-        lines.push(Line::from(Span::styled("  — unavailable", Style::default().fg(INACTIVE_FG))));
-        lines.push(Line::from(Span::styled("  abtop --setup", Style::default().fg(GRAPH_TEXT))));
-    } else {
-        let bar_w = avail_w.saturating_sub(12).min(12).max(3);
-        for rl in &app.rate_limits {
-            // Always show source label (CLAUDE / CODEX) with freshness
-            let fresh_str = rl.updated_at.map(|ts| {
-                let now = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap_or_default().as_secs();
-                let ago = now.saturating_sub(ts);
-                if ago < 60 { format!(" {}s ago", ago) } else { format!(" {}m ago", ago / 60) }
-            }).unwrap_or_default();
-            let label = format!(" {}{}", rl.source.to_uppercase(), fresh_str);
-            lines.push(Line::from(Span::styled(label, Style::default().fg(TITLE).add_modifier(Modifier::BOLD))));
-            // Cap lines per source so panel doesn't overflow
-            if lines.len() >= avail_h.saturating_sub(3) { break; }
-            if let Some(pct) = rl.five_hour_pct {
-                let reset = rl.five_hour_resets_at.map(|ts| format_reset_time(ts)).unwrap_or_default();
-                let c = grad_at(&cpu_grad, pct);
-                let mut s = vec![styled_label(" 5h ")];
-                s.extend(meter_bar(pct, bar_w, &cpu_grad));
-                s.push(Span::styled(format!(" {:>3.0}%", pct), Style::default().fg(c)));
-                lines.push(Line::from(s));
-                if !reset.is_empty() {
-                    lines.push(Line::from(Span::styled(format!("  {}", reset), Style::default().fg(GRAPH_TEXT))));
-                }
-            }
-            if let Some(pct) = rl.seven_day_pct {
-                let reset = rl.seven_day_resets_at.map(|ts| format_reset_time(ts)).unwrap_or_default();
-                let c = grad_at(&cpu_grad, pct);
-                let mut s = vec![styled_label(" 7d ")];
-                s.extend(meter_bar(pct, bar_w, &cpu_grad));
-                s.push(Span::styled(format!(" {:>3.0}%", pct), Style::default().fg(c)));
-                lines.push(Line::from(s));
-                if !reset.is_empty() {
-                    lines.push(Line::from(Span::styled(format!("  {}", reset), Style::default().fg(GRAPH_TEXT))));
-                }
-            }
-        }
-    }
-
-    // Bottom: total tokens + rate
+    // Bottom summary: total tokens + rate
     let total_tokens: u64 = app.sessions.iter().map(|s| s.total_tokens()).sum();
     let rates = &app.token_rates;
     let ticks_per_min = 30usize;
     let tokens_per_min: f64 = rates.iter().rev().take(ticks_per_min).sum();
-
-    while lines.len() < avail_h.saturating_sub(1) {
-        lines.push(Line::from(""));
+    if app.rate_limits.is_empty() {
+        let mut lines: Vec<Line> = Vec::new();
+        lines.push(Line::from(Span::styled(" QUOTA", Style::default().fg(TITLE).add_modifier(Modifier::BOLD))));
+        lines.push(Line::from(Span::styled("  — unavailable", Style::default().fg(INACTIVE_FG))));
+        lines.push(Line::from(Span::styled("  abtop --setup", Style::default().fg(GRAPH_TEXT))));
+        while lines.len() < avail_h.saturating_sub(1) {
+            lines.push(Line::from(""));
+        }
+        lines.push(Line::from(vec![
+            Span::styled(format!(" {}", fmt_tokens(total_tokens)), Style::default().fg(MAIN_FG)),
+            Span::styled(format!(" {}/min", fmt_tokens(tokens_per_min as u64)), Style::default().fg(GRAPH_TEXT)),
+        ]));
+        f.render_widget(Paragraph::new(lines), inner);
+        return;
     }
-    lines.push(Line::from(vec![
+
+    // Split into side-by-side columns: one per rate limit source (CLAUDE | CODEX)
+    let num_sources = app.rate_limits.len().max(1) as u16;
+    let col_w = inner.width / num_sources;
+    let content_h = inner.height.saturating_sub(1); // reserve last row for totals
+
+    for (i, rl) in app.rate_limits.iter().enumerate() {
+        let col_x = inner.x + (i as u16) * col_w;
+        let this_w = if i as u16 == num_sources - 1 {
+            inner.width - (i as u16) * col_w
+        } else {
+            col_w
+        };
+        let col_area = Rect { x: col_x, y: inner.y, width: this_w, height: content_h };
+        let col_w_usize = col_area.width as usize;
+        let bar_w = col_w_usize.saturating_sub(10).min(8).max(2);
+
+        let mut lines: Vec<Line> = Vec::new();
+
+        // Source label with freshness
+        let fresh_str = rl.updated_at.map(|ts| {
+            let now = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap_or_default().as_secs();
+            let ago = now.saturating_sub(ts);
+            if ago < 60 { format!(" {}s ago", ago) } else { format!(" {}m ago", ago / 60) }
+        }).unwrap_or_default();
+        let label = format!(" {}{}", rl.source.to_uppercase(), fresh_str);
+        lines.push(Line::from(Span::styled(label, Style::default().fg(TITLE).add_modifier(Modifier::BOLD))));
+
+        if let Some(pct) = rl.five_hour_pct {
+            let reset = rl.five_hour_resets_at.map(|ts| format_reset_time(ts)).unwrap_or_default();
+            let c = grad_at(&cpu_grad, pct);
+            let mut s = vec![styled_label(" 5h ")];
+            s.extend(meter_bar(pct, bar_w, &cpu_grad));
+            s.push(Span::styled(format!(" {:>3.0}%", pct), Style::default().fg(c)));
+            lines.push(Line::from(s));
+            if !reset.is_empty() {
+                lines.push(Line::from(Span::styled(format!("  {}", reset), Style::default().fg(GRAPH_TEXT))));
+            }
+        }
+        if let Some(pct) = rl.seven_day_pct {
+            let reset = rl.seven_day_resets_at.map(|ts| format_reset_time(ts)).unwrap_or_default();
+            let c = grad_at(&cpu_grad, pct);
+            let mut s = vec![styled_label(" 7d ")];
+            s.extend(meter_bar(pct, bar_w, &cpu_grad));
+            s.push(Span::styled(format!(" {:>3.0}%", pct), Style::default().fg(c)));
+            lines.push(Line::from(s));
+            if !reset.is_empty() {
+                lines.push(Line::from(Span::styled(format!("  {}", reset), Style::default().fg(GRAPH_TEXT))));
+            }
+        }
+
+        f.render_widget(Paragraph::new(lines), col_area);
+    }
+
+    // Total tokens summary on last row (full width)
+    let bottom_area = Rect {
+        x: inner.x,
+        y: inner.y + content_h,
+        width: inner.width,
+        height: 1,
+    };
+    f.render_widget(Paragraph::new(vec![Line::from(vec![
         Span::styled(format!(" {}", fmt_tokens(total_tokens)), Style::default().fg(MAIN_FG)),
         Span::styled(format!(" {}/min", fmt_tokens(tokens_per_min as u64)), Style::default().fg(GRAPH_TEXT)),
-    ]));
-
-    f.render_widget(Paragraph::new(lines), inner);
+    ])]), bottom_area);
 }
 
 // ── tokens panel — maps to btop's ²mem panel ────────────────────────────────
@@ -1422,14 +1448,13 @@ fn draw_sessions_panel(f: &mut Frame, app: &App, area: Rect) {
 // ── footer — btop style: ↑ select ↓ info ↵ terminate ── ─────────────────────
 
 fn draw_footer(f: &mut Frame, app: &App, area: Rect) {
-    let has_tmux = std::env::var("TMUX").is_ok();
-    let remaining = (area.width as usize).saturating_sub(50);
+    let jump_available = std::env::var("TMUX").is_ok() || cfg!(target_os = "macos");
 
     let mut spans = vec![
         Span::styled(" ↑↓", Style::default().fg(HI_FG)),
         Span::styled(" select ", Style::default().fg(MAIN_FG)),
     ];
-    if has_tmux {
+    if jump_available {
         spans.push(Span::styled("↵", Style::default().fg(HI_FG)));
         spans.push(Span::styled(" jump ", Style::default().fg(MAIN_FG)));
     } else {
@@ -1442,7 +1467,19 @@ fn draw_footer(f: &mut Frame, app: &App, area: Rect) {
     spans.push(Span::styled(" quit ", Style::default().fg(MAIN_FG)));
     spans.push(Span::styled("r", Style::default().fg(HI_FG)));
     spans.push(Span::styled(" refresh ", Style::default().fg(MAIN_FG)));
-    spans.push(Span::styled("2s auto", Style::default().fg(INACTIVE_FG)));
+
+    // Show transient status message or default "2s auto"
+    let status_text = app.status_msg.as_ref()
+        .filter(|(_, when)| when.elapsed().as_secs() < 3)
+        .map(|(msg, _)| msg.as_str());
+    if let Some(msg) = status_text {
+        spans.push(Span::styled(format!(" {msg} "), Style::default().fg(Color::Rgb(220, 76, 76))));
+    } else {
+        spans.push(Span::styled("2s auto", Style::default().fg(INACTIVE_FG)));
+    }
+
+    let used: usize = spans.iter().map(|s| s.content.len()).sum();
+    let remaining = (area.width as usize).saturating_sub(used + 2);
     spans.push(Span::styled(
         format!("{:>width$}", format!("{} sessions", app.sessions.len()), width = remaining),
         Style::default().fg(GRAPH_TEXT),
