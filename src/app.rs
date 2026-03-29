@@ -110,6 +110,18 @@ impl App {
         }
     }
 
+    pub fn has_pending_summaries(&self) -> bool {
+        !self.pending_summaries.is_empty()
+    }
+
+    pub fn drain_summaries(&mut self) {
+        while let Ok((sid, summary)) = self.summary_rx.try_recv() {
+            self.pending_summaries.remove(&sid);
+            self.summaries.insert(sid, summary);
+            save_summary_cache(&self.summaries);
+        }
+    }
+
     pub fn select_next(&mut self) {
         if !self.sessions.is_empty() {
             self.selected = (self.selected + 1).min(self.sessions.len() - 1);
@@ -147,7 +159,7 @@ fn generate_summary(prompt: &str) -> String {
     // Truncate input to avoid sending huge prompts
     let input: String = prompt.chars().take(200).collect();
     let request = format!(
-        "Summarize this conversation topic in 3-5 words. Output ONLY the title, nothing else:\n{}",
+        "You are a conversation title generator. Given the user's first message, create a short title (3-5 words) that describes what they want to do. Be specific and actionable. Do NOT output generic titles like 'New conversation' or 'Initial setup'. Output ONLY the title, no quotes, no explanation.\n\nUser message: {}",
         input
     );
 
@@ -184,11 +196,17 @@ fn generate_summary(prompt: &str) -> String {
             let raw = String::from_utf8_lossy(&output.stdout)
                 .trim()
                 .to_string();
-            // Reject empty, too long, or prompt-echo outputs
+            let lower = raw.to_lowercase();
+            // Reject empty, too long, generic, or prompt-echo outputs
             if raw.is_empty()
                 || raw.chars().count() > 40
                 || raw.contains("Summarize")
                 || raw.starts_with("- ")
+                || lower.contains("new conversation")
+                || lower.contains("initial setup")
+                || lower.contains("initial project")
+                || lower.contains("initial conversation")
+                || lower.starts_with("greeting")
             {
                 fallback
             } else {

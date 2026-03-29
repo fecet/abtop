@@ -16,6 +16,16 @@ fn main() -> io::Result<()> {
     if std::env::args().any(|a| a == "--once") {
         let mut app = App::new();
         app.tick();
+        // Wait for pending summaries (up to 20s)
+        if app.has_pending_summaries() {
+            for _ in 0..40 {
+                std::thread::sleep(Duration::from_millis(500));
+                app.drain_summaries();
+                if !app.has_pending_summaries() {
+                    break;
+                }
+            }
+        }
         print_snapshot(&app);
         return Ok(());
     }
