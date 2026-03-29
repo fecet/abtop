@@ -87,8 +87,10 @@ impl ClaudeCollector {
         let mut last_activity = std::time::UNIX_EPOCH;
 
         if let Some(ref tp) = transcript_path {
-            let offset = self.offsets.get(&sf.session_id).copied().unwrap_or(0);
-            let result = parse_transcript(tp, offset);
+            // Always parse from beginning to get correct cumulative totals.
+            // Incremental parsing requires carrying forward previous totals,
+            // which is v0.2 optimization scope.
+            let result = parse_transcript(tp, 0);
 
             model = result.model;
             total_input = result.total_input;
@@ -101,8 +103,6 @@ impl ClaudeCollector {
             version = result.version;
             git_branch = result.git_branch;
             last_activity = result.last_activity;
-
-            self.offsets.insert(sf.session_id.clone(), result.new_offset);
         }
 
         let status = if !pid_alive {
