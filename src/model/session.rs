@@ -5,6 +5,7 @@ use std::time::{Duration, SystemTime, UNIX_EPOCH};
 #[derive(Debug, Clone, Default)]
 pub struct RateLimitInfo {
     /// "claude" or "codex"
+    #[allow(dead_code)]
     pub source: String,
     /// 5-hour window usage percentage (0-100)
     pub five_hour_pct: Option<f64>,
@@ -22,6 +23,7 @@ pub struct RateLimitInfo {
 pub enum SessionStatus {
     Working,
     Waiting,
+    #[allow(dead_code)]
     Error(String),
     Done,
 }
@@ -37,6 +39,7 @@ pub struct ChildProcess {
 #[derive(Debug, Clone)]
 pub struct SubAgent {
     pub name: String,
+    #[allow(dead_code)]
     pub agent_type: String,
     pub status: String,
     pub tokens: u64,
@@ -48,6 +51,7 @@ pub struct AgentSession {
     pub agent_cli: &'static str,
     pub pid: u32,
     pub session_id: String,
+    #[allow(dead_code)]
     pub cwd: String,
     pub project_name: String,
     pub started_at: u64,
@@ -70,6 +74,7 @@ pub struct AgentSession {
     pub mem_file_count: u32,
     pub mem_line_count: u32,
     pub children: Vec<ChildProcess>,
+    #[allow(dead_code)]
     pub transcript_offset: u64,
     /// First user prompt text, truncated — used as session title
     pub initial_prompt: String,
@@ -109,5 +114,6 @@ pub struct SessionFile {
     #[serde(rename = "startedAt")]
     pub started_at: u64,
     #[serde(default)]
+    #[allow(dead_code)]
     pub kind: String,
 }

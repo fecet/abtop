@@ -9,6 +9,7 @@ use std::process::Command;
 pub struct ClaudeCollector {
     sessions_dir: PathBuf,
     projects_dir: PathBuf,
+    #[allow(dead_code)]
     offsets: HashMap<String, u64>,
 }
 
@@ -651,6 +652,7 @@ fn truncate(s: &str, max: usize) -> String {
     }
 }
 
+#[allow(dead_code)]
 fn is_claude_process(pid: u32) -> bool {
     let output = Command::new("ps")
         .args(["-p", &pid.to_string(), "-o", "command="])
