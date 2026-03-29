@@ -230,10 +230,15 @@ impl ClaudeCollector {
             let stdout = String::from_utf8_lossy(&output.stdout);
             for line in stdout.lines().skip(1) {
                 let parts: Vec<&str> = line.split_whitespace().collect();
-                if parts.len() >= 9 {
+                // Only parse TCP LISTEN rows; skip UDP and other types
+                // lsof output: "COMMAND PID USER FD TYPE DEVICE SIZE/OFF NODE NAME (LISTEN)"
+                // NODE is parts[7], must be "TCP"; line must contain "(LISTEN)"
+                let is_tcp_listen = parts.len() >= 9
+                    && parts[7] == "TCP"
+                    && line.contains("(LISTEN)");
+                if is_tcp_listen {
                     if let Ok(pid) = parts[1].parse::<u32>() {
-                        // NAME column starts at index 8, may be followed by "(LISTEN)"
-                        // e.g. "TCP *:56393 (LISTEN)" → parts[8] = "*:56393"
+                        // NAME column at index 8: "*:56393" or "127.0.0.1:3000"
                         if let Some(addr) = parts.get(8) {
                             if let Some(port_str) = addr.rsplit(':').next() {
                                 if let Ok(port) = port_str.parse::<u16>() {

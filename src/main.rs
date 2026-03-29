@@ -25,13 +25,14 @@ fn main() -> io::Result<()> {
     stdout().execute(EnterAlternateScreen)?;
     let mut terminal = Terminal::new(CrosstermBackend::new(stdout()))?;
 
-    let result = run_app(&mut terminal);
+    let app_result = run_app(&mut terminal);
 
-    // Always restore terminal, even on error — best-effort both steps
-    let _ = disable_raw_mode();
-    let _ = stdout().execute(LeaveAlternateScreen);
+    // Always attempt both cleanup steps regardless of app result
+    let r1 = disable_raw_mode();
+    let r2 = stdout().execute(LeaveAlternateScreen).map(|_| ());
 
-    result
+    // Return app error first, then cleanup errors
+    app_result.and(r1).and(r2)
 }
 
 fn run_app(terminal: &mut Terminal<CrosstermBackend<io::Stdout>>) -> io::Result<()> {
