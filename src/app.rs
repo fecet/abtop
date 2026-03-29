@@ -205,7 +205,16 @@ impl App {
                 "—".to_string()
             }
         } else if self.pending_summaries.contains(&session.session_id) {
-            "...".to_string()
+            // Animate dots: . → .. → ... (cycles every ~1.5s at 2s tick)
+            let dots = match (std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap_or_default()
+                .as_millis() / 500) % 3 {
+                0 => ".",
+                1 => "..",
+                _ => "...",
+            };
+            dots.to_string()
         } else if !session.initial_prompt.is_empty() {
             sanitize_fallback(&session.initial_prompt, 28)
         } else {

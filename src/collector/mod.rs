@@ -72,7 +72,8 @@ impl MultiCollector {
         for c in &mut self.collectors {
             all.extend(c.collect(&shared));
         }
-        // Hide dead sessions (Done + no live PID)
+        // Hide dead sessions — abtop is a live monitor, not a history viewer.
+        // Only remove Done sessions with no live PID (pid==0 means process already exited).
         all.retain(|s| !(matches!(s.status, crate::model::SessionStatus::Done) && s.pid == 0));
         all.sort_by_key(|s| std::cmp::Reverse(s.started_at));
         all

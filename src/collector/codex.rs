@@ -129,10 +129,10 @@ impl CodexCollector {
             .to_string();
 
         // Status detection
+        // Note: Codex interactive sessions emit task_complete after every turn,
+        // so task_complete alone does NOT mean the session is finished when PID is alive.
         let pid_alive = proc.is_some();
         let status = if !pid_alive {
-            SessionStatus::Done
-        } else if result.task_complete {
             SessionStatus::Done
         } else {
             let since_activity = std::time::SystemTime::now()
