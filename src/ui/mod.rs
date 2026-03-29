@@ -2,7 +2,7 @@ use crate::app::App;
 use ratatui::layout::{Constraint, Direction, Layout, Rect};
 use ratatui::style::{Color, Modifier, Style};
 use ratatui::text::{Line, Span};
-use ratatui::widgets::{Block, Borders, Cell, Gauge, Paragraph, Row, Table};
+use ratatui::widgets::{Block, Borders, Cell, Paragraph, Row, Table};
 use ratatui::Frame;
 
 pub fn draw(f: &mut Frame, app: &App) {
@@ -263,7 +263,7 @@ fn draw_sessions_panel(f: &mut Frame, app: &App, area: Rect) {
         let task_prefix = match &session.status {
             crate::model::SessionStatus::Working => "└─ ",
             crate::model::SessionStatus::Waiting => "└─ ",
-            crate::model::SessionStatus::Error(e) => "└─ ",
+            crate::model::SessionStatus::Error(_) => "└─ ",
             crate::model::SessionStatus::Done => "└─ ",
         };
         rows.push(Row::new(vec![
@@ -402,9 +402,10 @@ fn fmt_tokens(n: u64) -> String {
 }
 
 fn truncate_str(s: &str, max: usize) -> String {
-    if s.len() <= max {
+    if s.chars().count() <= max {
         s.to_string()
     } else {
-        format!("{}…", &s[..max - 1])
+        let truncated: String = s.chars().take(max - 1).collect();
+        format!("{}…", truncated)
     }
 }

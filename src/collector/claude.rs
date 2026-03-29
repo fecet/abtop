@@ -2,7 +2,7 @@ use crate::model::{AgentSession, ChildProcess, SessionFile, SessionStatus};
 use serde_json::Value;
 use std::collections::HashMap;
 use std::fs;
-use std::io::{BufRead, BufReader, Read, Seek, SeekFrom};
+use std::io::{BufRead, BufReader, Seek, SeekFrom};
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
@@ -58,7 +58,9 @@ impl ClaudeCollector {
         let content = fs::read_to_string(path).ok()?;
         let sf: SessionFile = serde_json::from_str(&content).ok()?;
 
-        let pid_alive = is_claude_process(sf.pid);
+        let pid_alive = process_info.get(&sf.pid)
+            .map(|p| p.command.contains("/claude") && p.command.contains("--session-id"))
+            .unwrap_or(false);
 
         let project_name = sf
             .cwd
@@ -230,9 +232,9 @@ impl ClaudeCollector {
                 let parts: Vec<&str> = line.split_whitespace().collect();
                 if parts.len() >= 9 {
                     if let Ok(pid) = parts[1].parse::<u32>() {
-                        // Parse port from "host:port" in NAME column
-                        if let Some(addr) = parts.get(8) {
-                            if let Some(port_str) = addr.rsplit(':').next() {
+                        // NAME is the last column (e.g. "*:8080" or "127.0.0.1:3000")
+                        if let Some(name) = parts.last() {
+                            if let Some(port_str) = name.rsplit(':').next() {
                                 if let Ok(port) = port_str.parse::<u16>() {
                                     map.entry(pid).or_default().push(port);
                                 }
@@ -402,10 +404,11 @@ fn shorten_path(path: &str) -> String {
 }
 
 fn truncate(s: &str, max: usize) -> String {
-    if s.len() <= max {
+    if s.chars().count() <= max {
         s.to_string()
     } else {
-        format!("{}…", &s[..max - 1])
+        let truncated: String = s.chars().take(max - 1).collect();
+        format!("{}…", truncated)
     }
 }
 
