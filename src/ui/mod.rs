@@ -290,11 +290,14 @@ pub fn draw(f: &mut Frame, app: &App) {
     let context_ideal: u16 = (app.sessions.len() as u16 + 4).clamp(5, 10);
 
     let available = h.saturating_sub(FIXED);
-    // 1) Sessions get what they need first (min 5)
-    let sessions_h = sessions_ideal.min(available).max(5.min(available));
-    // 2) Mid gets ideal from remaining
+    const MID_MIN: u16 = 6;
+    // 1) Reserve mid minimum first, then sessions get the rest
+    let mid_reserved = MID_MIN.min(available);
+    let sessions_budget = available.saturating_sub(mid_reserved);
+    let sessions_h = sessions_ideal.min(sessions_budget).max(5.min(sessions_budget));
+    // 2) Mid gets ideal from remaining (at least the reserved minimum)
     let after_sessions = available.saturating_sub(sessions_h);
-    let mid_h = mid_h_ideal.min(after_sessions);
+    let mid_h = mid_h_ideal.min(after_sessions).max(mid_reserved.min(after_sessions));
     // 3) Context only if sessions are fully satisfied and surplus >= CONTEXT_MIN
     let surplus = available.saturating_sub(sessions_h + mid_h);
     let context_h = if sessions_h >= sessions_ideal && surplus >= CONTEXT_MIN {
