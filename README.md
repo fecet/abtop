@@ -4,7 +4,7 @@
 
 See every Claude Code and Codex CLI session at a glance — token usage, context window %, rate limits, child processes, open ports, and more.
 
-<video src="https://github.com/user-attachments/assets/d50b7c1b-ed81-44a2-903f-902d4de911ae" width="100%" autoplay loop muted></video>
+![demo](assets/demo.gif)
 
 ## Why
 
