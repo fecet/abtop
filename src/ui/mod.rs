@@ -937,18 +937,8 @@ fn draw_sessions_panel(f: &mut Frame, app: &App, area: Rect) {
 
     // Session list: 1 header + 2 rows per session (main + 1 task line)
     let session_rows: u16 = app.sessions.len() as u16 * 2;
-    // Dynamic detail reserve: SESSION header (up to 3) + children/subagents + footer (3)
-    let detail_reserve = {
-        let mut h: u16 = 3; // SESSION title + cwd + task
-        h += 3; // footer (blank + MEM + version)
-        if let Some(session) = app.sessions.get(app.selected) {
-            let nc = session.children.len() as u16;
-            let ns = session.subagents.len() as u16;
-            if nc > 0 { h += 1 + nc; } // CHILDREN header + rows
-            if ns > 0 { h += 1 + ns; } // SUBAGENTS header + rows
-        }
-        h.min(inner.height / 2)
-    };
+    // Fixed detail height: keeps the detail panel stable regardless of content
+    let detail_reserve: u16 = 10.min(inner.height / 2);
     let max_table = inner.height.saturating_sub(detail_reserve);
     let table_h = (1 + session_rows).min(max_table);
 
