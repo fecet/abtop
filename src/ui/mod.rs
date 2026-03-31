@@ -1,4 +1,5 @@
 use crate::app::App;
+use chrono::Timelike;
 use ratatui::layout::{Alignment, Constraint, Direction, Layout, Rect};
 use ratatui::style::{Color, Modifier, Style};
 use ratatui::text::{Line, Span};
@@ -1509,6 +1510,23 @@ fn draw_footer(f: &mut Frame, app: &App, area: Rect) {
         spans.push(Span::styled(format!(" {msg} "), Style::default().fg(Color::Rgb(220, 76, 76))));
     } else {
         spans.push(Span::styled("2s auto", Style::default().fg(INACTIVE_FG)));
+    }
+
+    // Peak hours warning: US business hours = PT 5am–11am = UTC 12:00–18:00
+    let peak_info = {
+        let now = chrono::Utc::now();
+        let hour = now.hour();
+        if (12..18).contains(&hour) {
+            let mins_left = (18 - hour) * 60 - now.minute();
+            let h = mins_left / 60;
+            let m = mins_left % 60;
+            Some(format!("⚡Claude Peak Hours (resets in {}h{:02}m)", h, m))
+        } else {
+            None
+        }
+    };
+    if let Some(ref peak) = peak_info {
+        spans.push(Span::styled(format!(" {peak} "), Style::default().fg(Color::Rgb(220, 160, 50))));
     }
 
     let used: usize = spans.iter().map(|s| s.content.len()).sum();
