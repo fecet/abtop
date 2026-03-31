@@ -283,6 +283,24 @@ cargo test                     # Tests
 cargo clippy                   # Lint
 ```
 
+## Release Process
+
+1. Bump version in `Cargo.toml` and commit:
+   ```bash
+   git add Cargo.toml Cargo.lock
+   git commit -m "chore: bump version to X.Y.Z"
+   git push
+   ```
+2. Create and push a git tag — CI handles everything else:
+   ```bash
+   git tag vX.Y.Z
+   git push origin vX.Y.Z
+   ```
+3. `release.yml` builds platform binaries and creates a GitHub Release.
+4. `publish.yml` runs `cargo publish` to crates.io automatically.
+
+**Do NOT run `cargo publish` or `gh release create` manually** — the CI workflows handle both.
+
 ## Non-Goals (v0.1)
 
 - Gemini/Cursor support
