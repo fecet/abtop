@@ -49,13 +49,13 @@ pub fn populate_demo(app: &mut App) {
             subagents: vec![
                 SubAgent {
                     name: "Explore test coverage".into(),
-                    agent_type: "Explore".into(),
+
                     status: "done".into(),
                     tokens: 12_400,
                 },
                 SubAgent {
                     name: "Run integration tests".into(),
-                    agent_type: "general-purpose".into(),
+
                     status: "working".into(),
                     tokens: 8_200,
                 },
@@ -76,7 +76,7 @@ pub fn populate_demo(app: &mut App) {
                     port: None,
                 },
             ],
-            transcript_offset: 0,
+
             first_assistant_text: String::new(),
             initial_prompt: "Implement Stripe payment integration for checkout flow".into(),
         },
@@ -111,7 +111,7 @@ pub fn populate_demo(app: &mut App) {
             mem_file_count: 2,
             mem_line_count: 8,
             children: vec![],
-            transcript_offset: 0,
+
             first_assistant_text: String::new(),
             initial_prompt: "Add batch inference endpoint with GPU scheduling".into(),
         },
@@ -163,7 +163,7 @@ pub fn populate_demo(app: &mut App) {
                     port: Some(5432),
                 },
             ],
-            transcript_offset: 0,
+
             first_assistant_text: String::new(),
             initial_prompt: "Fix CORS headers and add rate limiting middleware".into(),
         },
@@ -202,7 +202,7 @@ pub fn populate_demo(app: &mut App) {
                     port: Some(8080),
                 },
             ],
-            transcript_offset: 0,
+
             first_assistant_text: String::new(),
             initial_prompt: "Create interactive heatmap component with D3.js".into(),
         },

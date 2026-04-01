@@ -134,7 +134,6 @@ fn print_snapshot(app: &App) {
         let status = match &session.status {
             model::SessionStatus::Working => "● Work",
             model::SessionStatus::Waiting => "◌ Wait",
-            model::SessionStatus::Error(_) => "✗ Err",
             model::SessionStatus::Done => "✓ Done",
         };
         let sid_short = if session.session_id.len() >= 7 {

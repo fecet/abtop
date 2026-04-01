@@ -257,7 +257,6 @@ impl CodexCollector {
             mem_file_count: 0,
             mem_line_count: 0,
             children,
-            transcript_offset: 0,
             initial_prompt: result.initial_prompt,
             first_assistant_text: String::new(),
         }, rate_limit))

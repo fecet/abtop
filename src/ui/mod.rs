@@ -1043,9 +1043,6 @@ fn draw_sessions_panel(f: &mut Frame, app: &App, area: Rect) {
             crate::model::SessionStatus::Waiting => {
                 ("◌ Wait", grad_at(&proc_grad, 50.0))
             }
-            crate::model::SessionStatus::Error(_) => {
-                ("✗ Err ", grad_at(&proc_grad, 100.0))
-            }
             crate::model::SessionStatus::Done => ("✓ Done", INACTIVE_FG),
         };
 
