@@ -44,14 +44,18 @@ pub fn load_config() -> AppConfig {
     config
 }
 
-pub fn save_theme(name: &str) {
-    let Some(path) = config_path() else { return };
+pub fn save_theme(name: &str) -> Result<(), String> {
+    let path = config_path().ok_or("no config directory")?;
     if let Some(parent) = path.parent() {
-        let _ = std::fs::create_dir_all(parent);
+        std::fs::create_dir_all(parent).map_err(|e| e.to_string())?;
     }
 
-    // Read existing config, update theme line
-    let content = std::fs::read_to_string(&path).unwrap_or_default();
+    // Read existing config, update theme line (NotFound = fresh file, other errors = fail)
+    let content = match std::fs::read_to_string(&path) {
+        Ok(c) => c,
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => String::new(),
+        Err(e) => return Err(e.to_string()),
+    };
     let mut lines: Vec<String> = Vec::new();
     let mut found = false;
     for line in content.lines() {
@@ -65,5 +69,5 @@ pub fn save_theme(name: &str) {
     if !found {
         lines.push(format!("theme = \"{}\"", name));
     }
-    let _ = std::fs::write(&path, lines.join("\n") + "\n");
+    std::fs::write(&path, lines.join("\n") + "\n").map_err(|e| e.to_string())
 }

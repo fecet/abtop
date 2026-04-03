@@ -2,7 +2,7 @@ use crate::app::App;
 use crate::theme::Theme;
 use chrono::Timelike;
 use ratatui::layout::Rect;
-use ratatui::style::{Color, Style};
+use ratatui::style::Style;
 use ratatui::text::{Line, Span};
 use ratatui::widgets::Paragraph;
 use ratatui::Frame;
@@ -32,7 +32,7 @@ pub(crate) fn draw_footer(f: &mut Frame, app: &App, area: Rect, theme: &Theme) {
         .filter(|(_, when)| when.elapsed().as_secs() < 3)
         .map(|(msg, _)| msg.as_str());
     if let Some(msg) = status_text {
-        spans.push(Span::styled(format!(" {msg} "), Style::default().fg(Color::Rgb(220, 76, 76))));
+        spans.push(Span::styled(format!(" {msg} "), Style::default().fg(theme.status_fg)));
     } else {
         spans.push(Span::styled("2s auto", Style::default().fg(theme.inactive_fg)));
     }
@@ -51,7 +51,7 @@ pub(crate) fn draw_footer(f: &mut Frame, app: &App, area: Rect, theme: &Theme) {
         }
     };
     if let Some(ref peak) = peak_info {
-        spans.push(Span::styled(format!(" {peak} "), Style::default().fg(Color::Rgb(220, 160, 50))));
+        spans.push(Span::styled(format!(" {peak} "), Style::default().fg(theme.warning_fg)));
     }
 
     let used: usize = spans.iter().map(|s| s.content.len()).sum();

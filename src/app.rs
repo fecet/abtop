@@ -60,6 +60,7 @@ pub struct App {
 impl App {
     pub fn new(theme: Theme) -> Self {
         let (tx, rx) = mpsc::channel();
+        // Load cached summaries from disk
         let summaries = load_summary_cache();
         Self {
             sessions: Vec::new(),
@@ -68,7 +69,7 @@ impl App {
             token_rates: VecDeque::with_capacity(GRAPH_HISTORY_LEN),
             rate_limits: Vec::new(),
             prev_tokens: HashMap::new(),
-            rate_limit_counter: 5,
+            rate_limit_counter: 5, // trigger on first tick
             collector: MultiCollector::new(),
             summaries,
             pending_summaries: HashSet::new(),
@@ -87,8 +88,11 @@ impl App {
         let current = names.iter().position(|&n| n == self.theme.name).unwrap_or(0);
         let next = (current + 1) % names.len();
         self.theme = Theme::by_name(names[next]).unwrap_or_default();
-        self.set_status(format!("theme: {}", names[next]));
-        crate::config::save_theme(names[next]);
+        if let Err(e) = crate::config::save_theme(names[next]) {
+            self.set_status(format!("theme: {} (save failed: {})", names[next], e));
+        } else {
+            self.set_status(format!("theme: {}", names[next]));
+        }
     }
 
     /// Set a transient status message that auto-clears after 3 seconds.

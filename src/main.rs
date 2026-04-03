@@ -36,7 +36,22 @@ fn main() -> io::Result<()> {
     // --theme flag > config file > default
     let initial_theme = std::env::args()
         .position(|a| a == "--theme")
-        .and_then(|pos| std::env::args().nth(pos + 1))
+        .map(|pos| {
+            let val = std::env::args().nth(pos + 1);
+            match val {
+                Some(name) if !name.starts_with('-') => name,
+                Some(name) => {
+                    eprintln!("--theme requires a theme name, got '{}'", name);
+                    eprintln!("available: {}", theme::THEME_NAMES.join(", "));
+                    std::process::exit(1);
+                }
+                None => {
+                    eprintln!("--theme requires a theme name");
+                    eprintln!("available: {}", theme::THEME_NAMES.join(", "));
+                    std::process::exit(1);
+                }
+            }
+        })
         .map(|name| {
             theme::Theme::by_name(&name).unwrap_or_else(|| {
                 eprintln!(

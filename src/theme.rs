@@ -22,6 +22,10 @@ pub struct Theme {
     pub div_line: Color,
     pub session_id: Color,
 
+    // semantic colors
+    pub status_fg: Color,
+    pub warning_fg: Color,
+
     // box borders
     pub cpu_box: Color,
     pub mem_box: Color,
@@ -74,6 +78,8 @@ impl Theme {
             proc_misc: Color::Rgb(13, 231, 86),
             div_line: Color::Rgb(48, 48, 48),
             session_id: Color::Rgb(176, 160, 112),
+            status_fg: Color::Rgb(220, 76, 76),
+            warning_fg: Color::Rgb(220, 160, 50),
             cpu_box: Color::Rgb(85, 109, 89),
             mem_box: Color::Rgb(108, 108, 75),
             net_box: Color::Rgb(92, 88, 141),
@@ -120,6 +126,8 @@ impl Theme {
             proc_misc: Color::Rgb(80, 250, 123),
             div_line: Color::Rgb(68, 71, 90),
             session_id: Color::Rgb(241, 250, 140),
+            status_fg: Color::Rgb(255, 85, 85),
+            warning_fg: Color::Rgb(241, 250, 140),
             cpu_box: Color::Rgb(139, 233, 253),
             mem_box: Color::Rgb(189, 147, 249),
             net_box: Color::Rgb(255, 121, 198),
@@ -167,6 +175,8 @@ impl Theme {
             proc_misc: Color::Rgb(166, 227, 161),
             div_line: Color::Rgb(69, 71, 90),
             session_id: Color::Rgb(249, 226, 175),
+            status_fg: Color::Rgb(243, 139, 168),
+            warning_fg: Color::Rgb(249, 226, 175),
             cpu_box: Color::Rgb(137, 180, 250),
             mem_box: Color::Rgb(203, 166, 247),
             net_box: Color::Rgb(245, 194, 231),
@@ -214,6 +224,8 @@ impl Theme {
             proc_misc: Color::Rgb(158, 206, 106),      // green #9ece6a
             div_line: Color::Rgb(26, 27, 38),          // bg #1a1b26
             session_id: Color::Rgb(224, 175, 104),     // yellow #e0af68
+            status_fg: Color::Rgb(247, 118, 142),      // red #f7768e
+            warning_fg: Color::Rgb(224, 175, 104),     // yellow #e0af68
             cpu_box: Color::Rgb(125, 207, 255),        // cyan #7dcfff
             mem_box: Color::Rgb(187, 154, 247),        // magenta #bb9af7
             net_box: Color::Rgb(247, 118, 142),        // red #f7768e
@@ -261,6 +273,8 @@ impl Theme {
             proc_misc: Color::Rgb(184, 187, 38),       // bright green #b8bb26
             div_line: Color::Rgb(50, 48, 47),          // bg0_soft #32302f
             session_id: Color::Rgb(250, 189, 47),      // bright yellow #fabd2f
+            status_fg: Color::Rgb(251, 73, 52),        // bright red #fb4934
+            warning_fg: Color::Rgb(250, 189, 47),      // bright yellow #fabd2f
             cpu_box: Color::Rgb(131, 165, 152),        // bright blue #83a598
             mem_box: Color::Rgb(211, 134, 155),        // bright purple #d3869b
             net_box: Color::Rgb(254, 128, 25),         // bright orange #fe8019
@@ -308,6 +322,8 @@ impl Theme {
             proc_misc: Color::Rgb(163, 190, 140),      // nord14 green #a3be8c
             div_line: Color::Rgb(46, 52, 64),          // nord0 #2e3440
             session_id: Color::Rgb(235, 203, 139),     // nord13 yellow #ebcb8b
+            status_fg: Color::Rgb(191, 97, 106),       // nord11 red #bf616a
+            warning_fg: Color::Rgb(235, 203, 139),     // nord13 yellow #ebcb8b
             cpu_box: Color::Rgb(136, 192, 208),        // nord8 #88c0d0
             mem_box: Color::Rgb(180, 142, 173),        // nord15 purple #b48ead
             net_box: Color::Rgb(208, 135, 112),        // nord12 orange #d08770
