@@ -9,10 +9,11 @@ const STATUSLINE_SCRIPT: &str = r#"#!/bin/bash
 # to avoid ARG_MAX limits on large payloads.
 INPUT=""
 while IFS= read -r -t 5 line; do
-    INPUT="${INPUT}${line}"
+    INPUT="${INPUT}${line}
+"
 done
 [ -z "$INPUT" ] && exit 0
-echo "$INPUT" | python3 -c "
+printf '%s' "$INPUT" | python3 -c "
 import sys, json, time, os
 data = json.load(sys.stdin)
 rl = data.get('rate_limits')
