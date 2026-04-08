@@ -47,7 +47,16 @@ impl Default for Theme {
 }
 
 pub const THEME_NAMES: &[&str] = &[
-    "btop", "dracula", "catppuccin", "tokyo-night", "gruvbox", "nord",
+    "btop",
+    "dracula",
+    "catppuccin",
+    "tokyo-night",
+    "gruvbox",
+    "nord",
+    "high-contrast",
+    "protanopia",
+    "deuteranopia",
+    "tritanopia",
 ];
 
 impl Theme {
@@ -59,6 +68,10 @@ impl Theme {
             "tokyo-night" => Some(Self::tokyo_night()),
             "gruvbox" => Some(Self::gruvbox()),
             "nord" => Some(Self::nord()),
+            "high-contrast" => Some(Self::high_contrast()),
+            "protanopia" => Some(Self::protanopia()),
+            "deuteranopia" => Some(Self::deuteranopia()),
+            "tritanopia" => Some(Self::tritanopia()),
             _ => None,
         }
     }
@@ -352,6 +365,209 @@ impl Theme {
                 start: (46, 52, 64),
                 mid: (136, 192, 208),
                 end: (180, 142, 173),
+            },
+        }
+    }
+
+    /// High contrast — maximum luminance separation for low-vision users.
+    /// Pure white fg on black, yellow/cyan accents (distinguishable under
+    /// any color vision deficiency).
+    pub fn high_contrast() -> Self {
+        Self {
+            name: "high-contrast",
+            main_fg: Color::Rgb(255, 255, 255),
+            title: Color::Rgb(255, 255, 255),
+            hi_fg: Color::Rgb(255, 255, 0),
+            selected_bg: Color::Rgb(255, 255, 0),
+            selected_fg: Color::Rgb(0, 0, 0),
+            inactive_fg: Color::Rgb(128, 128, 128),
+            graph_text: Color::Rgb(192, 192, 192),
+            meter_bg: Color::Rgb(64, 64, 64),
+            proc_misc: Color::Rgb(0, 255, 255),
+            div_line: Color::Rgb(96, 96, 96),
+            session_id: Color::Rgb(255, 255, 0),
+            status_fg: Color::Rgb(255, 255, 0),
+            warning_fg: Color::Rgb(255, 255, 0),
+            cpu_box: Color::Rgb(255, 255, 255),
+            mem_box: Color::Rgb(255, 255, 255),
+            net_box: Color::Rgb(255, 255, 255),
+            proc_box: Color::Rgb(255, 255, 255),
+            cpu_grad: Gradient {
+                start: (0, 255, 255),
+                mid: (255, 255, 255),
+                end: (255, 255, 0),
+            },
+            proc_grad: Gradient {
+                start: (0, 255, 255),
+                mid: (255, 255, 255),
+                end: (255, 255, 0),
+            },
+            used_grad: Gradient {
+                start: (32, 32, 32),
+                mid: (192, 192, 192),
+                end: (255, 255, 0),
+            },
+            free_grad: Gradient {
+                start: (32, 32, 32),
+                mid: (192, 192, 192),
+                end: (0, 255, 255),
+            },
+            cached_grad: Gradient {
+                start: (32, 32, 32),
+                mid: (128, 128, 255),
+                end: (255, 255, 255),
+            },
+        }
+    }
+
+    /// Protanopia (red-blind) — IBM colorblind-safe palette.
+    /// Avoids red/green confusion. Blue #648FFF, purple #785EF0,
+    /// magenta #DC267F, orange #FE6100, yellow #FFB000.
+    pub fn protanopia() -> Self {
+        Self {
+            name: "protanopia",
+            main_fg: Color::Rgb(220, 220, 220),
+            title: Color::Rgb(255, 255, 255),
+            hi_fg: Color::Rgb(254, 97, 0),            // orange
+            selected_bg: Color::Rgb(40, 40, 60),
+            selected_fg: Color::Rgb(255, 255, 255),
+            inactive_fg: Color::Rgb(96, 96, 112),
+            graph_text: Color::Rgb(140, 140, 160),
+            meter_bg: Color::Rgb(48, 48, 64),
+            proc_misc: Color::Rgb(100, 143, 255),     // blue
+            div_line: Color::Rgb(48, 48, 64),
+            session_id: Color::Rgb(255, 176, 0),      // yellow
+            status_fg: Color::Rgb(254, 97, 0),        // orange (no red)
+            warning_fg: Color::Rgb(255, 176, 0),      // yellow
+            cpu_box: Color::Rgb(100, 143, 255),
+            mem_box: Color::Rgb(120, 94, 240),
+            net_box: Color::Rgb(220, 38, 127),
+            proc_box: Color::Rgb(254, 97, 0),
+            cpu_grad: Gradient {
+                start: (100, 143, 255),
+                mid: (255, 176, 0),
+                end: (254, 97, 0),
+            },
+            proc_grad: Gradient {
+                start: (100, 143, 255),
+                mid: (255, 176, 0),
+                end: (254, 97, 0),
+            },
+            used_grad: Gradient {
+                start: (40, 40, 60),
+                mid: (220, 38, 127),
+                end: (254, 97, 0),
+            },
+            free_grad: Gradient {
+                start: (20, 20, 40),
+                mid: (100, 143, 255),
+                end: (255, 176, 0),
+            },
+            cached_grad: Gradient {
+                start: (20, 20, 40),
+                mid: (120, 94, 240),
+                end: (100, 143, 255),
+            },
+        }
+    }
+
+    /// Deuteranopia (green-blind) — IBM colorblind-safe palette,
+    /// biased toward blue/yellow separation which deuteranopes
+    /// distinguish most reliably.
+    pub fn deuteranopia() -> Self {
+        Self {
+            name: "deuteranopia",
+            main_fg: Color::Rgb(222, 222, 230),
+            title: Color::Rgb(255, 255, 255),
+            hi_fg: Color::Rgb(255, 194, 10),          // amber
+            selected_bg: Color::Rgb(30, 40, 70),
+            selected_fg: Color::Rgb(255, 255, 255),
+            inactive_fg: Color::Rgb(100, 108, 130),
+            graph_text: Color::Rgb(148, 156, 178),
+            meter_bg: Color::Rgb(42, 52, 82),
+            proc_misc: Color::Rgb(26, 133, 255),      // blue
+            div_line: Color::Rgb(42, 52, 82),
+            session_id: Color::Rgb(255, 194, 10),     // amber
+            status_fg: Color::Rgb(255, 102, 0),       // orange (not red)
+            warning_fg: Color::Rgb(255, 194, 10),
+            cpu_box: Color::Rgb(26, 133, 255),
+            mem_box: Color::Rgb(156, 106, 222),
+            net_box: Color::Rgb(255, 194, 10),
+            proc_box: Color::Rgb(255, 102, 0),
+            cpu_grad: Gradient {
+                start: (26, 133, 255),
+                mid: (255, 194, 10),
+                end: (255, 102, 0),
+            },
+            proc_grad: Gradient {
+                start: (26, 133, 255),
+                mid: (255, 194, 10),
+                end: (255, 102, 0),
+            },
+            used_grad: Gradient {
+                start: (30, 40, 70),
+                mid: (255, 194, 10),
+                end: (255, 102, 0),
+            },
+            free_grad: Gradient {
+                start: (18, 24, 48),
+                mid: (26, 133, 255),
+                end: (180, 210, 255),
+            },
+            cached_grad: Gradient {
+                start: (18, 24, 48),
+                mid: (156, 106, 222),
+                end: (26, 133, 255),
+            },
+        }
+    }
+
+    /// Tritanopia (blue-blind) — red/cyan palette avoiding blue/yellow
+    /// confusion. Inspired by GitHub's tritanopia-friendly colors.
+    pub fn tritanopia() -> Self {
+        Self {
+            name: "tritanopia",
+            main_fg: Color::Rgb(224, 224, 224),
+            title: Color::Rgb(255, 255, 255),
+            hi_fg: Color::Rgb(220, 50, 47),           // red
+            selected_bg: Color::Rgb(64, 32, 40),
+            selected_fg: Color::Rgb(255, 255, 255),
+            inactive_fg: Color::Rgb(120, 104, 108),
+            graph_text: Color::Rgb(168, 152, 156),
+            meter_bg: Color::Rgb(60, 40, 48),
+            proc_misc: Color::Rgb(64, 196, 208),      // cyan
+            div_line: Color::Rgb(48, 32, 38),
+            session_id: Color::Rgb(255, 140, 144),    // pink
+            status_fg: Color::Rgb(220, 50, 47),
+            warning_fg: Color::Rgb(255, 140, 144),
+            cpu_box: Color::Rgb(64, 196, 208),
+            mem_box: Color::Rgb(198, 120, 221),
+            net_box: Color::Rgb(220, 50, 47),
+            proc_box: Color::Rgb(255, 140, 144),
+            cpu_grad: Gradient {
+                start: (64, 196, 208),
+                mid: (255, 140, 144),
+                end: (220, 50, 47),
+            },
+            proc_grad: Gradient {
+                start: (64, 196, 208),
+                mid: (255, 140, 144),
+                end: (220, 50, 47),
+            },
+            used_grad: Gradient {
+                start: (40, 24, 28),
+                mid: (255, 140, 144),
+                end: (220, 50, 47),
+            },
+            free_grad: Gradient {
+                start: (20, 28, 32),
+                mid: (64, 196, 208),
+                end: (180, 232, 240),
+            },
+            cached_grad: Gradient {
+                start: (20, 28, 32),
+                mid: (198, 120, 221),
+                end: (64, 196, 208),
             },
         }
     }

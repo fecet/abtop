@@ -84,7 +84,7 @@ tmux new -s work
 
 ## Themes
 
-6 built-in themes. Press `t` to cycle at runtime, or launch with `--theme <name>`. Your choice is saved to `~/.config/abtop/config.toml`.
+10 built-in themes, including 4 colorblind-friendly options (`high-contrast`, `protanopia`, `deuteranopia`, `tritanopia`). Press `t` to cycle at runtime, or launch with `--theme <name>`. Your choice is saved to `~/.config/abtop/config.toml`.
 
 | btop (default) | dracula | catppuccin |
 |:-:|:-:|:-:|
@@ -93,6 +93,16 @@ tmux new -s work
 | tokyo-night | gruvbox | nord |
 |:-:|:-:|:-:|
 | ![tokyo-night](assets/themes/tokyo-night.png) | ![gruvbox](assets/themes/gruvbox.png) | ![nord](assets/themes/nord.png) |
+
+Colorblind-friendly themes:
+
+| high-contrast | protanopia |
+|:-:|:-:|
+| ![high-contrast](assets/themes/high-contrast.png) | ![protanopia](assets/themes/protanopia.png) |
+
+| deuteranopia | tritanopia |
+|:-:|:-:|
+| ![deuteranopia](assets/themes/deuteranopia.png) | ![tritanopia](assets/themes/tritanopia.png) |
 
 Theme support contributed by [@tbouquet](https://github.com/tbouquet).
 
