@@ -94,6 +94,16 @@ tmux new -s work
 |:-:|:-:|:-:|
 | ![tokyo-night](assets/themes/tokyo-night.png) | ![gruvbox](assets/themes/gruvbox.png) | ![nord](assets/themes/nord.png) |
 
+Colorblind-friendly themes:
+
+| high-contrast | protanopia |
+|:-:|:-:|
+| ![high-contrast](assets/themes/high-contrast.png) | ![protanopia](assets/themes/protanopia.png) |
+
+| deuteranopia | tritanopia |
+|:-:|:-:|
+| ![deuteranopia](assets/themes/deuteranopia.png) | ![tritanopia](assets/themes/tritanopia.png) |
+
 Theme support contributed by [@tbouquet](https://github.com/tbouquet).
 
 ## Key Bindings
