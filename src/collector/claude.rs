@@ -265,6 +265,11 @@ impl ClaudeCollector {
         let memory_dir = project_dir.join("memory");
         let (mem_file_count, mem_line_count) = Self::collect_memory_status(&memory_dir);
 
+        // Effort level (persistent `effortLevel` from settings files).
+        // Note: the `/effort` slash command is session-scoped and does NOT persist,
+        // so this only reflects settings.json — not live in-session overrides.
+        let effort = read_effort_level(&sf.cwd);
+
         Some(AgentSession {
             agent_cli: "claude",
             pid: sf.pid,
@@ -274,6 +279,7 @@ impl ClaudeCollector {
             started_at: sf.started_at,
             status,
             model,
+            effort,
             context_percent,
             total_input_tokens: total_input,
             total_output_tokens: total_output,
@@ -758,6 +764,54 @@ fn context_window_for_model(model: &str, last_context_tokens: u64) -> u64 {
     }
 }
 
+/// Read the persistent `effortLevel` for a Claude Code session.
+///
+/// Precedence (highest wins), matching Claude Code's own resolution order:
+/// 1. `CLAUDE_CODE_EFFORT_LEVEL` env var (abtop's own env — only visible when
+///    set in the user's shell before launching both abtop and claude)
+/// 2. `{cwd}/.claude/settings.local.json`
+/// 3. `{cwd}/.claude/settings.json`
+/// 4. `~/.claude/settings.local.json`
+/// 5. `~/.claude/settings.json`
+///
+/// Returns an empty string when no `effortLevel` is set. This does NOT capture
+/// in-session `/effort` changes — those are ephemeral and not written to disk.
+fn read_effort_level(cwd: &str) -> String {
+    if let Ok(v) = std::env::var("CLAUDE_CODE_EFFORT_LEVEL") {
+        let trimmed = v.trim();
+        if !trimmed.is_empty() {
+            return trimmed.to_string();
+        }
+    }
+
+    let mut candidates: Vec<PathBuf> = Vec::new();
+    let cwd_path = PathBuf::from(cwd);
+    candidates.push(cwd_path.join(".claude").join("settings.local.json"));
+    candidates.push(cwd_path.join(".claude").join("settings.json"));
+    if let Some(home) = dirs::home_dir() {
+        candidates.push(home.join(".claude").join("settings.local.json"));
+        candidates.push(home.join(".claude").join("settings.json"));
+    }
+
+    for path in candidates {
+        if let Some(level) = read_effort_from_settings(&path) {
+            return level;
+        }
+    }
+    String::new()
+}
+
+fn read_effort_from_settings(path: &Path) -> Option<String> {
+    let content = fs::read_to_string(path).ok()?;
+    let val: Value = serde_json::from_str(&content).ok()?;
+    let level = val.get("effortLevel")?.as_str()?.trim();
+    if level.is_empty() {
+        None
+    } else {
+        Some(level.to_string())
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -948,5 +1002,34 @@ mod tests {
         let result = parse_transcript(file.path(), 0);
         assert_eq!(result.version, "2.1.90");
         assert_eq!(result.git_branch, "feat/payments");
+    }
+
+    #[test]
+    fn test_read_effort_from_settings_extracts_value() {
+        let mut file = tempfile::NamedTempFile::new().unwrap();
+        write!(file, r#"{{"effortLevel":"high","other":true}}"#).unwrap();
+        file.flush().unwrap();
+        assert_eq!(read_effort_from_settings(file.path()).as_deref(), Some("high"));
+    }
+
+    #[test]
+    fn test_read_effort_from_settings_missing_field_returns_none() {
+        let mut file = tempfile::NamedTempFile::new().unwrap();
+        write!(file, r#"{{"permissions":{{"deny":[]}}}}"#).unwrap();
+        file.flush().unwrap();
+        assert!(read_effort_from_settings(file.path()).is_none());
+    }
+
+    #[test]
+    fn test_read_effort_from_settings_empty_string_returns_none() {
+        let mut file = tempfile::NamedTempFile::new().unwrap();
+        write!(file, r#"{{"effortLevel":""}}"#).unwrap();
+        file.flush().unwrap();
+        assert!(read_effort_from_settings(file.path()).is_none());
+    }
+
+    #[test]
+    fn test_read_effort_from_settings_nonexistent_file() {
+        assert!(read_effort_from_settings(Path::new("/nonexistent/nowhere.json")).is_none());
     }
 }

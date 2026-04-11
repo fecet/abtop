@@ -508,12 +508,18 @@ pub(crate) fn draw_sessions_panel(f: &mut Frame, app: &App, area: Rect, theme: &
                     Style::default().fg(mem_color),
                 )));
             }
+            let effort_part = if session.effort.is_empty() {
+                String::new()
+            } else {
+                format!(" · effort: {}", session.effort)
+            };
             footer_lines.push(Line::from(Span::styled(
                 format!(
-                    " {} · {} · {} turns",
+                    " {} · {} · {} turns{}",
                     session.version,
                     session.elapsed_display(),
-                    session.turn_count
+                    session.turn_count,
+                    effort_part,
                 ),
                 Style::default().fg(theme.inactive_fg),
             )));

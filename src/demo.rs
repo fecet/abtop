@@ -27,6 +27,7 @@ pub fn populate_demo(app: &mut App) {
             started_at: now - 2 * 3600 * 1000, // 2h ago
             status: SessionStatus::Working,
             model: "claude-opus-4-6".into(),
+            effort: String::new(),
             context_percent: 72.0,
             total_input_tokens: 48_200,
             total_output_tokens: 12_800,
@@ -89,6 +90,7 @@ pub fn populate_demo(app: &mut App) {
             started_at: now - 47 * 60 * 1000, // 47m ago
             status: SessionStatus::Waiting,
             model: "claude-sonnet-4-6".into(),
+            effort: String::new(),
             context_percent: 91.0,
             total_input_tokens: 82_000,
             total_output_tokens: 38_000,
@@ -124,6 +126,7 @@ pub fn populate_demo(app: &mut App) {
             started_at: now - 15 * 60 * 1000, // 15m ago
             status: SessionStatus::Working,
             model: "claude-haiku-4-5".into(),
+            effort: String::new(),
             context_percent: 42.0,
             total_input_tokens: 5_200,
             total_output_tokens: 2_800,
@@ -176,6 +179,7 @@ pub fn populate_demo(app: &mut App) {
             started_at: now - 5 * 60 * 1000, // 5m ago
             status: SessionStatus::Working,
             model: "gpt-5.4".into(),
+            effort: "medium".into(),
             context_percent: 18.0,
             total_input_tokens: 3_100,
             total_output_tokens: 1_400,

@@ -60,6 +60,9 @@ pub struct AgentSession {
     pub started_at: u64,
     pub status: SessionStatus,
     pub model: String,
+    /// Reasoning effort setting (Codex CLI only: "minimal" | "low" | "medium" | "high").
+    /// Empty string when unknown or not applicable.
+    pub effort: String,
     pub context_percent: f64,
     pub total_input_tokens: u64,
     pub total_output_tokens: u64,
@@ -138,6 +141,7 @@ mod tests {
             started_at: 0,
             status: SessionStatus::Waiting,
             model: String::new(),
+            effort: String::new(),
             context_percent: 0.0,
             total_input_tokens: input,
             total_output_tokens: output,

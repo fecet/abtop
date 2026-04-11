@@ -240,6 +240,7 @@ impl CodexCollector {
             started_at: result.started_at,
             status,
             model: result.model,
+            effort: result.effort,
             context_percent,
             total_input_tokens: result.total_input,
             total_output_tokens: result.total_output,
@@ -335,6 +336,9 @@ struct CodexJSONLResult {
     cwd: String,
     started_at: u64,
     model: String,
+    /// Reasoning effort setting from turn_context: "minimal" | "low" | "medium" | "high".
+    /// Tracks the most recent value — users can change `/effort` mid-session.
+    effort: String,
     version: String,
     git_branch: String,
     context_window: u64,
@@ -372,6 +376,7 @@ fn parse_codex_jsonl(path: &Path) -> Option<CodexJSONLResult> {
         cwd: String::new(),
         started_at: 0,
         model: String::from("-"),
+        effort: String::new(),
         version: String::new(),
         git_branch: String::new(),
         context_window: 0,
@@ -554,6 +559,10 @@ fn parse_codex_jsonl(path: &Path) -> Option<CodexJSONLResult> {
                 if let Some(m) = payload["model"].as_str() {
                     result.model = m.to_string();
                 }
+                // Effort may change mid-session via /effort — always take the latest.
+                if let Some(e) = payload["effort"].as_str() {
+                    result.effort = e.to_string();
+                }
                 if let Some(cw) = payload["model_context_window"].as_u64() {
                     result.context_window = cw;
                 }
@@ -649,6 +658,32 @@ mod tests {
         let result = parse_codex_jsonl(file.path()).unwrap();
         // Bad line skipped, agent_message still counted
         assert_eq!(result.turn_count, 1);
+    }
+
+    #[test]
+    fn test_parse_codex_turn_context_effort() {
+        let mut file = tempfile::NamedTempFile::new().unwrap();
+        write_lines(&mut file, &[
+            SESSION_META,
+            r#"{"type":"turn_context","timestamp":"2026-03-28T15:01:00Z","payload":{"cwd":"/home/user/project","model":"gpt-5-codex","effort":"low","summary":"auto"}}"#,
+            // Later turn_context overrides — /effort can change mid-session
+            r#"{"type":"turn_context","timestamp":"2026-03-28T15:02:00Z","payload":{"cwd":"/home/user/project","model":"gpt-5-codex","effort":"high","summary":"auto"}}"#,
+        ]);
+        let result = parse_codex_jsonl(file.path()).unwrap();
+        assert_eq!(result.model, "gpt-5-codex");
+        assert_eq!(result.effort, "high");
+    }
+
+    #[test]
+    fn test_parse_codex_missing_effort_is_empty() {
+        let mut file = tempfile::NamedTempFile::new().unwrap();
+        write_lines(&mut file, &[
+            SESSION_META,
+            // turn_context without effort field
+            r#"{"type":"turn_context","timestamp":"2026-03-28T15:01:00Z","payload":{"cwd":"/home/user/project","model":"gpt-5-codex"}}"#,
+        ]);
+        let result = parse_codex_jsonl(file.path()).unwrap();
+        assert_eq!(result.effort, "");
     }
 
     #[test]
