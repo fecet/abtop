@@ -8,9 +8,15 @@ use std::io::{BufRead, BufReader, Read, Seek, SeekFrom};
 use std::os::unix::fs::MetadataExt;
 use std::path::{Path, PathBuf};
 
-pub struct ClaudeCollector {
+/// A single Claude config directory (sessions + projects + transcripts).
+struct ConfigDir {
     sessions_dir: PathBuf,
     projects_dir: PathBuf,
+}
+
+pub struct ClaudeCollector {
+    /// All known config directories to scan for sessions.
+    config_dirs: Vec<ConfigDir>,
     /// Cached transcript parse results keyed by session_id.
     /// On each tick, only new bytes since `new_offset` are parsed.
     transcript_cache: HashMap<String, TranscriptResult>,
@@ -18,36 +24,76 @@ pub struct ClaudeCollector {
 
 impl ClaudeCollector {
     pub fn new() -> Self {
-        let base = std::env::var("CLAUDE_CONFIG_DIR")
-            .ok()
-            .map(PathBuf::from)
-            .filter(|p| p.is_dir())
-            .unwrap_or_else(|| dirs::home_dir().unwrap_or_default().join(".claude"));
         Self {
-            sessions_dir: base.join("sessions"),
-            projects_dir: base.join("projects"),
+            config_dirs: Vec::new(),
             transcript_cache: HashMap::new(),
         }
     }
 
+    /// Discover all unique Claude config directories by reading
+    /// /proc/<pid>/environ for each running Claude process.
+    /// Always includes the default (~/.claude) and CLAUDE_CONFIG_DIR if set.
+    fn refresh_config_dirs(&mut self, process_info: &HashMap<u32, process::ProcInfo>) {
+        let mut seen = std::collections::HashSet::new();
+
+        // Always include the default directory
+        let default = dirs::home_dir().unwrap_or_default().join(".claude");
+        seen.insert(default);
+
+        // Include CLAUDE_CONFIG_DIR from abtop's own environment
+        if let Ok(dir) = std::env::var("CLAUDE_CONFIG_DIR") {
+            let p = PathBuf::from(dir);
+            if p.is_dir() {
+                seen.insert(p);
+            }
+        }
+
+        // Discover from running Claude processes via /proc/<pid>/environ
+        for (pid, info) in process_info {
+            if !process::cmd_has_binary(&info.command, "claude") {
+                continue;
+            }
+            if let Some(dir) = read_env_var_from_proc(*pid, "CLAUDE_CONFIG_DIR") {
+                let p = PathBuf::from(dir);
+                if p.is_dir() {
+                    seen.insert(p);
+                }
+            }
+        }
+
+        self.config_dirs = seen
+            .into_iter()
+            .map(|base| ConfigDir {
+                sessions_dir: base.join("sessions"),
+                projects_dir: base.join("projects"),
+            })
+            .collect();
+    }
+
     fn collect_sessions(&mut self, shared: &super::SharedProcessData) -> Vec<AgentSession> {
-        let session_files = match fs::read_dir(&self.sessions_dir) {
-            Ok(entries) => entries,
-            Err(_) => return vec![],
-        };
+        self.refresh_config_dirs(&shared.process_info);
+
+        // Collect all session file paths first to avoid borrowing self
+        // immutably (config_dirs) and mutably (load_session) at the same time.
+        let mut session_paths = Vec::new();
+        for config in &self.config_dirs {
+            let session_files = match fs::read_dir(&config.sessions_dir) {
+                Ok(entries) => entries,
+                Err(_) => continue,
+            };
+
+            for entry in session_files.flatten() {
+                let path = entry.path();
+                if path.extension().and_then(|e| e.to_str()) != Some("json") {
+                    continue;
+                }
+                session_paths.push(path);
+            }
+        }
 
         let mut sessions = Vec::new();
-        for entry in session_files.flatten() {
-            let path = entry.path();
-            if path.extension().and_then(|e| e.to_str()) != Some("json") {
-                continue;
-            }
-            // Skip symlinks to avoid reading unintended files
-            if entry.file_type().map(|ft| ft.is_symlink()).unwrap_or(true) {
-                continue;
-            }
-
-            if let Some(session) = self.load_session(&path, &shared.process_info, &shared.children_map, &shared.ports) {
+        for path in &session_paths {
+            if let Some(session) = self.load_session(path, &shared.process_info, &shared.children_map, &shared.ports) {
                 sessions.push(session);
             }
         }
@@ -266,7 +312,12 @@ impl ClaudeCollector {
         let project_dir = transcript_path
             .as_ref()
             .and_then(|tp| tp.parent().map(|p| p.to_path_buf()))
-            .unwrap_or_else(|| self.projects_dir.join(encode_cwd_path(&sf.cwd)));
+            .unwrap_or_else(|| {
+                // Use the first config dir's projects_dir as fallback
+                self.config_dirs.first()
+                    .map(|c| c.projects_dir.join(encode_cwd_path(&sf.cwd)))
+                    .unwrap_or_default()
+            });
 
         // Subagent discovery
         let subagents_dir = project_dir.join(&sf.session_id).join("subagents");
@@ -315,28 +366,34 @@ impl ClaudeCollector {
 
     fn find_transcript(&self, cwd: &str, session_id: &str) -> Option<PathBuf> {
         let jsonl_name = format!("{}.jsonl", session_id);
-
-        // Primary: look up by encoded cwd
         let encoded = encode_cwd_path(cwd);
-        let path = self.projects_dir.join(&encoded).join(&jsonl_name);
-        if path.exists() && !is_symlink(&path) {
-            return Some(path);
-        }
+        // Collect projects_dir paths to avoid borrow issues
+        let projects_dirs: Vec<&Path> = self.config_dirs.iter()
+            .map(|c| c.projects_dir.as_path())
+            .collect();
 
-        // Fallback: scan all project directories for the session file.
-        // Handles worktree (-w) sessions where the transcript directory
-        // may not match the encoded cwd from the session file.
-        if let Ok(entries) = fs::read_dir(&self.projects_dir) {
-            for entry in entries.flatten() {
-                if entry.file_type().map(|ft| ft.is_symlink()).unwrap_or(true) {
-                    continue;
-                }
-                if !entry.path().is_dir() {
-                    continue;
-                }
-                let candidate = entry.path().join(&jsonl_name);
-                if candidate.exists() && !is_symlink(&candidate) {
-                    return Some(candidate);
+        for projects_dir in projects_dirs {
+            // Primary: look up by encoded cwd
+            let path = projects_dir.join(&encoded).join(&jsonl_name);
+            if path.exists() && !is_symlink(&path) {
+                return Some(path);
+            }
+
+            // Fallback: scan all project directories for the session file.
+            // Handles worktree (-w) sessions where the transcript directory
+            // may not match the encoded cwd from the session file.
+            if let Ok(entries) = fs::read_dir(projects_dir) {
+                for entry in entries.flatten() {
+                    if entry.file_type().map(|ft| ft.is_symlink()).unwrap_or(true) {
+                        continue;
+                    }
+                    if !entry.path().is_dir() {
+                        continue;
+                    }
+                    let candidate = entry.path().join(&jsonl_name);
+                    if candidate.exists() && !is_symlink(&candidate) {
+                        return Some(candidate);
+                    }
                 }
             }
         }
@@ -848,6 +905,26 @@ fn read_effort_from_settings(path: &Path) -> Option<String> {
     } else {
         Some(level.to_string())
     }
+}
+
+/// Read a single environment variable from a running process via /proc/<pid>/environ.
+/// Returns None if the process is inaccessible or the variable is not set.
+/// The environ file contains NUL-separated KEY=VALUE pairs.
+#[cfg(target_os = "linux")]
+fn read_env_var_from_proc(pid: u32, var_name: &str) -> Option<String> {
+    let environ_path = format!("/proc/{}/environ", pid);
+    let data = fs::read(&environ_path).ok()?;
+    let prefix = format!("{}=", var_name);
+    data.split(|&b| b == 0)
+        .filter_map(|entry| std::str::from_utf8(entry).ok())
+        .find(|entry| entry.starts_with(&prefix))
+        .map(|entry| entry[prefix.len()..].to_string())
+}
+
+/// Stub for non-Linux platforms where /proc is not available.
+#[cfg(not(target_os = "linux"))]
+fn read_env_var_from_proc(_pid: u32, _var_name: &str) -> Option<String> {
+    None
 }
 
 #[cfg(test)]
