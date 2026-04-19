@@ -1,5 +1,5 @@
 use crate::app::App;
-use crate::model::{AgentSession, ChildProcess, OrphanPort, RateLimitInfo, SessionStatus, SubAgent};
+use crate::model::{AgentSession, ChildProcess, OrphanPort, RateLimitInfo, SessionStatus, SubAgent, ToolCall};
 use std::time::{SystemTime, UNIX_EPOCH};
 
 fn now_ms() -> u64 {
@@ -93,6 +93,24 @@ pub fn populate_demo(app: &mut App) {
 
             first_assistant_text: String::new(),
             initial_prompt: "Implement Stripe payment integration for checkout flow".into(),
+            tool_calls: vec![
+                ToolCall { name: "Read".into(), arg: "src/checkout/mod.rs".into(), duration_ms: 85 },
+                ToolCall { name: "Read".into(), arg: "Cargo.toml".into(), duration_ms: 42 },
+                ToolCall { name: "Bash".into(), arg: "cargo add stripe-rust".into(), duration_ms: 3200 },
+                ToolCall { name: "Edit".into(), arg: "src/checkout/payment.rs".into(), duration_ms: 120 },
+                ToolCall { name: "Edit".into(), arg: "src/checkout/mod.rs".into(), duration_ms: 95 },
+                ToolCall { name: "Write".into(), arg: "src/checkout/stripe.rs".into(), duration_ms: 180 },
+                ToolCall { name: "Bash".into(), arg: "cargo test".into(), duration_ms: 8400 },
+                ToolCall { name: "Edit".into(), arg: "src/checkout/stripe.rs".into(), duration_ms: 110 },
+                ToolCall { name: "Bash".into(), arg: "cargo test checkout".into(), duration_ms: 4200 },
+                ToolCall { name: "Read".into(), arg: "src/config.rs".into(), duration_ms: 55 },
+                ToolCall { name: "Edit".into(), arg: "src/config.rs".into(), duration_ms: 90 },
+                ToolCall { name: "Grep".into(), arg: "STRIPE_SECRET".into(), duration_ms: 320 },
+                ToolCall { name: "Agent".into(), arg: "security review".into(), duration_ms: 12400 },
+                ToolCall { name: "Bash".into(), arg: "cargo clippy".into(), duration_ms: 5100 },
+                ToolCall { name: "Edit".into(), arg: "src/checkout/payment.rs".into(), duration_ms: 145 },
+                ToolCall { name: "Bash".into(), arg: "cargo test".into(), duration_ms: 7800 },
+            ],
         },
         AgentSession {
             agent_cli: "claude",
@@ -138,6 +156,7 @@ pub fn populate_demo(app: &mut App) {
 
             first_assistant_text: String::new(),
             initial_prompt: "Add batch inference endpoint with GPU scheduling".into(),
+            tool_calls: vec![],
         },
         AgentSession {
             agent_cli: "claude",
@@ -194,6 +213,14 @@ pub fn populate_demo(app: &mut App) {
 
             first_assistant_text: String::new(),
             initial_prompt: "Fix CORS headers and add rate limiting middleware".into(),
+            tool_calls: vec![
+                ToolCall { name: "Read".into(), arg: "src/server.ts".into(), duration_ms: 60 },
+                ToolCall { name: "Edit".into(), arg: "src/middleware/cors.ts".into(), duration_ms: 150 },
+                ToolCall { name: "Write".into(), arg: "src/middleware/rate-limit.ts".into(), duration_ms: 200 },
+                ToolCall { name: "Bash".into(), arg: "npm test".into(), duration_ms: 2800 },
+                ToolCall { name: "Edit".into(), arg: "src/server.ts".into(), duration_ms: 110 },
+                ToolCall { name: "Bash".into(), arg: "npm run dev".into(), duration_ms: 1500 },
+            ],
         },
         AgentSession {
             agent_cli: "codex",
@@ -237,6 +264,7 @@ pub fn populate_demo(app: &mut App) {
 
             first_assistant_text: String::new(),
             initial_prompt: "Create interactive heatmap component with D3.js".into(),
+            tool_calls: vec![],
         },
     ];
 

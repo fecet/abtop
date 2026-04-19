@@ -380,14 +380,15 @@ pub(crate) fn draw_sessions_panel(f: &mut Frame, app: &App, area: Rect, theme: &
 
         let has_children = !session.children.is_empty();
         let has_subagents = !session.subagents.is_empty();
+        let has_timeline = app.show_timeline && !session.tool_calls.is_empty();
 
-        // Always show SESSION header (task) at top, then children/subagents below
+        // Always show SESSION header (task) at top, then children/subagents/timeline below
         let session_header_h: u16 = {
             let mut h = 1u16; // SESSION title
             if !session.initial_prompt.is_empty() { h += 1; }
             h
         };
-        let (header_area, lower_area) = if has_children || has_subagents {
+        let (header_area, lower_area) = if has_timeline || has_children || has_subagents {
             let parts = Layout::default()
                 .direction(Direction::Vertical)
                 .constraints([
@@ -420,8 +421,11 @@ pub(crate) fn draw_sessions_panel(f: &mut Frame, app: &App, area: Rect, theme: &
             f.render_widget(Paragraph::new(lines), header_area);
         }
 
-        // Children + Subagents below session header
+        // Timeline OR Children + Subagents below session header
         if let Some(lower) = lower_area {
+            if has_timeline {
+                draw_timeline(f, session, lower, theme, app.timeline_scroll);
+            } else if has_children || has_subagents {
             let body_chunks = if has_children && has_subagents {
                 Layout::default()
                     .direction(Direction::Horizontal)
@@ -542,6 +546,7 @@ pub(crate) fn draw_sessions_panel(f: &mut Frame, app: &App, area: Rect, theme: &
                 }
                 f.render_widget(Paragraph::new(lines), sa_area);
             }
+            } // end if has_children || has_subagents
         }
 
         // Footer: MEM + version (full width)
@@ -620,4 +625,100 @@ pub(crate) fn shorten_model(model: &str, is_1m: bool) -> String {
     } else {
         base
     }
+}
+
+/// Tool name → color mapping for timeline bars.
+fn tool_color(name: &str) -> Color {
+    match name {
+        "Read"    => Color::Rgb(100, 149, 237), // cornflower blue
+        "Edit"    => Color::Rgb(255, 193, 37),  // golden yellow
+        "Write"   => Color::Rgb(0, 206, 209),   // dark turquoise
+        "Bash"    => Color::Rgb(80, 200, 120),   // emerald green
+        "Grep"    => Color::Rgb(186, 85, 211),   // medium orchid
+        "Glob"    => Color::Rgb(147, 112, 219),  // medium purple
+        "Agent"   => Color::Rgb(255, 127, 80),   // coral
+        "Skill"   => Color::Rgb(255, 105, 180),  // hot pink
+        _         => Color::Rgb(169, 169, 169),  // dark gray
+    }
+}
+
+fn fmt_duration(ms: u64) -> String {
+    if ms >= 60_000 {
+        format!("{}m{:.0}s", ms / 60_000, (ms % 60_000) as f64 / 1000.0)
+    } else if ms >= 1000 {
+        format!("{:.1}s", ms as f64 / 1000.0)
+    } else {
+        format!("{}ms", ms)
+    }
+}
+
+fn draw_timeline(
+    f: &mut Frame,
+    session: &crate::model::AgentSession,
+    area: Rect,
+    theme: &Theme,
+    scroll: usize,
+) {
+    let tool_calls = &session.tool_calls;
+    if tool_calls.is_empty() {
+        return;
+    }
+
+    let total_duration: u64 = tool_calls.iter().map(|tc| tc.duration_ms).sum();
+    let max_duration = tool_calls.iter().map(|tc| tc.duration_ms).max().unwrap_or(1).max(1);
+
+    let mut lines = Vec::new();
+
+    // Header
+    lines.push(Line::from(vec![
+        Span::styled(
+            format!(" TIMELINE ({} calls, {})", tool_calls.len(), fmt_duration(total_duration)),
+            Style::default().fg(theme.title).add_modifier(Modifier::BOLD),
+        ),
+    ]));
+
+    // Available width for the bar: total width - name(7) - arg(22) - duration(8) - padding(5)
+    let bar_width = (area.width as usize).saturating_sub(42).max(5);
+
+    // Render each tool call as a row
+    let visible_rows = (area.height as usize).saturating_sub(1); // -1 for header
+    let start = scroll.min(tool_calls.len().saturating_sub(visible_rows));
+
+    for tc in tool_calls.iter().skip(start).take(visible_rows) {
+        let bar_fill = if max_duration > 0 {
+            ((tc.duration_ms as f64 / max_duration as f64) * bar_width as f64).ceil() as usize
+        } else {
+            0
+        };
+        let bar_fill = bar_fill.min(bar_width);
+        let bar_empty = bar_width - bar_fill;
+
+        let is_longest = tc.duration_ms == max_duration && max_duration > 0;
+        let star = if is_longest { " *" } else { "" };
+
+        let color = tool_color(&tc.name);
+
+        lines.push(Line::from(vec![
+            Span::styled(format!(" {:<6}", tc.name), Style::default().fg(color).add_modifier(Modifier::BOLD)),
+            Span::styled(
+                format!(" {:<20}", super::truncate_str(&tc.arg, 20)),
+                Style::default().fg(theme.graph_text),
+            ),
+            Span::styled(" ", Style::default()),
+            Span::styled(
+                "█".repeat(bar_fill),
+                Style::default().fg(color),
+            ),
+            Span::styled(
+                "░".repeat(bar_empty),
+                Style::default().fg(theme.div_line),
+            ),
+            Span::styled(
+                format!(" {:>6}{}", fmt_duration(tc.duration_ms), star),
+                Style::default().fg(if is_longest { theme.proc_misc } else { theme.graph_text }),
+            ),
+        ]));
+    }
+
+    f.render_widget(Paragraph::new(lines), area);
 }

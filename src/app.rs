@@ -74,12 +74,11 @@ pub struct App {
     pub show_sessions: bool,
     pub config_open: bool,
     pub config_selected: usize,
-    /// When true, subagents are shown as indented tree rows under their parent session.
     pub tree_view: bool,
-    /// Session filter: when non-empty, only matching sessions are shown.
     pub filter_text: String,
-    /// True when the filter input bar is capturing keystrokes.
     pub filter_active: bool,
+    pub show_timeline: bool,
+    pub timeline_scroll: usize,
 }
 
 impl App {
@@ -114,6 +113,8 @@ impl App {
             tree_view: false,
             filter_text: String::new(),
             filter_active: false,
+            show_timeline: false,
+            timeline_scroll: 0,
         }
     }
 
@@ -159,6 +160,11 @@ impl App {
             5 => self.show_sessions = !self.show_sessions,
             _ => {}
         }
+    }
+
+    pub fn toggle_timeline(&mut self) {
+        self.show_timeline = !self.show_timeline;
+        self.timeline_scroll = 0;
     }
 
     pub fn cycle_theme(&mut self) {
