@@ -278,6 +278,7 @@ cargo build                    # Build
 cargo run                      # Run TUI
 cargo run -- --once            # Print snapshot and exit
 cargo run -- --setup           # Install StatusLine hook for rate limit collection
+cargo run -- --exit-on-jump    # Quit after Enter-jumping to a tmux pane (for popup overlays)
 cargo test                     # Tests
 cargo clippy                   # Lint
 ```

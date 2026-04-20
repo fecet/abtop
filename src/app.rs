@@ -25,6 +25,18 @@ fn sanitize_fallback(prompt: &str, max_len: usize) -> String {
     }
 }
 
+/// Outcome of an Enter-key jump attempt. Distinct from `Option<String>` so
+/// callers (notably `--exit-on-jump`) can tell a real tmux jump apart from
+/// a no-op (outside tmux, or empty session list).
+pub enum JumpOutcome {
+    /// Actually switched to a tmux pane.
+    Jumped,
+    /// Tried to jump in tmux but no pane owns the session's PID.
+    Failed(String),
+    /// Not in tmux, or nothing selected — nothing happened.
+    NoOp,
+}
+
 pub struct App {
     pub sessions: Vec<AgentSession>,
     pub selected: usize,
@@ -422,21 +434,19 @@ impl App {
     }
 
     /// Jump to the terminal running the selected session's Claude process.
-    /// In tmux: switch to the pane. Otherwise: show a helpful status message.
-    pub fn jump_to_session(&mut self) -> Option<String> {
+    /// In tmux: switch to the pane. Otherwise: no-op.
+    pub fn jump_to_session(&mut self) -> JumpOutcome {
         if self.sessions.is_empty() {
-            return None;
+            return JumpOutcome::NoOp;
         }
-        let session = &self.sessions[self.selected];
-        let target_pid = session.pid;
-
-        // tmux: actual jump
-        if std::env::var("TMUX").is_ok() {
-            return self.jump_via_tmux(target_pid);
+        if std::env::var("TMUX").is_err() {
+            return JumpOutcome::NoOp;
         }
-
-        // No tmux: no action
-        None
+        let target_pid = self.sessions[self.selected].pid;
+        match self.jump_via_tmux(target_pid) {
+            None => JumpOutcome::Jumped,
+            Some(msg) => JumpOutcome::Failed(msg),
+        }
     }
 
     fn jump_via_tmux(&self, target_pid: u32) -> Option<String> {
