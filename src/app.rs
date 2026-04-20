@@ -62,6 +62,8 @@ pub struct App {
     pub show_sessions: bool,
     pub config_open: bool,
     pub config_selected: usize,
+    /// When true, subagents are shown as indented tree rows under their parent session.
+    pub tree_view: bool,
     /// Session filter: when non-empty, only matching sessions are shown.
     pub filter_text: String,
     /// True when the filter input bar is capturing keystrokes.
@@ -97,6 +99,7 @@ impl App {
             show_sessions: true,
             config_open: false,
             config_selected: 0,
+            tree_view: false,
             filter_text: String::new(),
             filter_active: false,
         }
