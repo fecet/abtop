@@ -132,6 +132,16 @@ fn run_app(terminal: &mut Terminal<CrosstermBackend<io::Stdout>>, demo_mode: boo
                             KeyCode::Enter | KeyCode::Char(' ') => app.config_toggle_selected(),
                             _ => {}
                         }
+                    } else if app.filter_active {
+                        match key.code {
+                            KeyCode::Esc => app.clear_filter(),
+                            KeyCode::Enter => app.filter_active = false,
+                            KeyCode::Backspace => app.filter_pop(),
+                            KeyCode::Down => app.select_next(),
+                            KeyCode::Up => app.select_prev(),
+                            KeyCode::Char(c) => app.filter_push(c),
+                            _ => {}
+                        }
                     } else {
                         match key.code {
                             KeyCode::Char('q') => app.quit(),
@@ -144,6 +154,8 @@ fn run_app(terminal: &mut Terminal<CrosstermBackend<io::Stdout>>, demo_mode: boo
                             KeyCode::Char('T') => app.tree_view = !app.tree_view,
                             KeyCode::Char(c @ '1'..='5') => app.toggle_panel(c as u8 - b'0'),
                             KeyCode::Char('c') => app.toggle_config(),
+                            KeyCode::Char('/') => app.filter_active = true,
+                            KeyCode::Esc if !app.filter_text.is_empty() => app.clear_filter(),
                             KeyCode::Enter if !demo_mode => {
                                 if let Some(msg) = app.jump_to_session() {
                                     app.set_status(msg);

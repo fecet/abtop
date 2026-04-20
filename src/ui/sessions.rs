@@ -20,11 +20,11 @@ pub(crate) fn draw_sessions_panel(f: &mut Frame, app: &App, area: Rect, theme: &
         height: area.height.saturating_sub(2),
     };
 
-    // Session list: 1 header + 2 rows per session (main + 1 task line)
-    // In tree view, add subagent rows
-    let session_rows: u16 = app.sessions.iter().map(|s| {
+    // Session list: 1 header + 2 rows per visible session, plus subagent rows in tree view.
+    let visible = app.visible_indices();
+    let session_rows: u16 = visible.iter().map(|&i| {
         let base = 2u16;
-        if app.tree_view { base + s.subagents.len() as u16 } else { base }
+        if app.tree_view { base + app.sessions[i].subagents.len() as u16 } else { base }
     }).sum();
     // Fixed detail height: keeps the detail panel stable regardless of content
     let detail_reserve: u16 = 10.min(inner.height / 2);
@@ -71,7 +71,9 @@ pub(crate) fn draw_sessions_panel(f: &mut Frame, app: &App, area: Rect, theme: &
     let context_label = if w >= 100 { "Context" } else { "Ctx" };
     let tokens_w: u16 = if w >= 100 { 7 } else { 5 };
 
-    for (i, session) in app.sessions.iter().enumerate() {
+    let visible = app.visible_indices();
+    for &i in &visible {
+        let session = &app.sessions[i];
         let selected = i == app.selected;
         let marker = if selected { "►" } else { " " };
 
@@ -275,7 +277,8 @@ pub(crate) fn draw_sessions_panel(f: &mut Frame, app: &App, area: Rect, theme: &
         widths_vec.push(Constraint::Length(4));   // turn
     }
 
-    // Scroll: rows per session varies with tree view
+    // Scroll: rows vary per session in tree view; use the built row list as the source of truth.
+    let visible_sessions = app.visible_indices();
     let total_rows = rows.len();
     let needs_scroll = total_rows > panel_chunks[0].height.saturating_sub(1) as usize;
 
@@ -295,10 +298,12 @@ pub(crate) fn draw_sessions_panel(f: &mut Frame, app: &App, area: Rect, theme: &
     }
 
     let visible_rows = table_area.height.saturating_sub(1) as usize; // -1 for header
-    // Calculate row offset for selected session (accounts for tree view subagent rows)
-    let selected_row_start: usize = app.sessions.iter().take(app.selected).map(|s| {
+    // Row offset for the selected session, accounting for subagent rows in tree view
+    // and filter-hidden sessions above it.
+    let selected_pos = visible_sessions.iter().position(|&i| i == app.selected).unwrap_or(0);
+    let selected_row_start: usize = visible_sessions.iter().take(selected_pos).map(|&i| {
         let base = 2;
-        if app.tree_view { base + s.subagents.len() } else { base }
+        if app.tree_view { base + app.sessions[i].subagents.len() } else { base }
     }).sum();
     let selected_session_rows = if app.tree_view {
         2 + app.sessions.get(app.selected).map_or(0, |s| s.subagents.len())
