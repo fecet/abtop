@@ -55,6 +55,13 @@ pub struct App {
     /// Kill confirmation: (selected_index, timestamp). Expires after 2s.
     kill_confirm: Option<(usize, Instant)>,
     pub theme: Theme,
+    pub show_context: bool,
+    pub show_quota: bool,
+    pub show_tokens: bool,
+    pub show_ports: bool,
+    pub show_sessions: bool,
+    pub config_open: bool,
+    pub config_selected: usize,
     /// Session filter: when non-empty, only matching sessions are shown.
     pub filter_text: String,
     /// True when the filter input bar is capturing keystrokes.
@@ -64,7 +71,6 @@ pub struct App {
 impl App {
     pub fn new(theme: Theme) -> Self {
         let (tx, rx) = mpsc::channel();
-        // Load cached summaries from disk
         let summaries = load_summary_cache();
         Self {
             sessions: Vec::new(),
@@ -73,7 +79,7 @@ impl App {
             token_rates: VecDeque::with_capacity(GRAPH_HISTORY_LEN),
             rate_limits: Vec::new(),
             prev_tokens: HashMap::new(),
-            rate_limit_counter: 5, // trigger on first tick
+            rate_limit_counter: 5,
             collector: MultiCollector::new(),
             summaries,
             pending_summaries: HashSet::new(),
@@ -84,8 +90,59 @@ impl App {
             status_msg: None,
             kill_confirm: None,
             theme,
+            show_context: true,
+            show_quota: true,
+            show_tokens: true,
+            show_ports: true,
+            show_sessions: true,
+            config_open: false,
+            config_selected: 0,
             filter_text: String::new(),
             filter_active: false,
+        }
+    }
+
+    pub fn toggle_panel(&mut self, panel: u8) {
+        match panel {
+            1 => self.show_context = !self.show_context,
+            2 => self.show_quota = !self.show_quota,
+            3 => self.show_tokens = !self.show_tokens,
+            4 => self.show_ports = !self.show_ports,
+            5 => self.show_sessions = !self.show_sessions,
+            _ => {}
+        }
+    }
+
+    pub fn toggle_config(&mut self) {
+        self.config_open = !self.config_open;
+        if self.config_open {
+            self.config_selected = 0;
+        }
+    }
+
+    pub fn config_item_count(&self) -> usize {
+        6 // theme + 5 panel toggles
+    }
+
+    pub fn config_select_next(&mut self) {
+        if self.config_selected + 1 < self.config_item_count() {
+            self.config_selected += 1;
+        }
+    }
+
+    pub fn config_select_prev(&mut self) {
+        self.config_selected = self.config_selected.saturating_sub(1);
+    }
+
+    pub fn config_toggle_selected(&mut self) {
+        match self.config_selected {
+            0 => self.cycle_theme(),
+            1 => self.show_context = !self.show_context,
+            2 => self.show_quota = !self.show_quota,
+            3 => self.show_tokens = !self.show_tokens,
+            4 => self.show_ports = !self.show_ports,
+            5 => self.show_sessions = !self.show_sessions,
+            _ => {}
         }
     }
 
@@ -113,6 +170,7 @@ impl App {
         if self.selected >= self.sessions.len() && !self.sessions.is_empty() {
             self.selected = self.sessions.len() - 1;
         }
+        self.clamp_selection_to_visible();
 
         // Compute rate as sum of per-session deltas (stable across session churn).
         // Update prev_tokens in place; stale entries are harmless (bounded by
@@ -135,7 +193,8 @@ impl App {
         // Poll rate limits: first tick immediately, then every 5 ticks ≈ 10s
         if self.rate_limits.is_empty() || self.rate_limit_counter >= 5 {
             self.rate_limit_counter = 0;
-            self.rate_limits = read_rate_limits();
+            let extra_dirs = self.collector.all_config_dirs();
+            self.rate_limits = read_rate_limits(&extra_dirs);
             // Merge live rate limits from agent collectors (e.g. Codex JSONL parsing)
             self.rate_limits.extend(self.collector.agent_rate_limits());
         } else {
@@ -213,16 +272,45 @@ impl App {
         }
         let query = self.filter_text.to_lowercase();
         self.sessions.iter().enumerate()
-            .filter(|(_, s)| {
-                s.project_name.to_lowercase().contains(&query)
-                    || s.model.to_lowercase().contains(&query)
-                    || s.session_id.to_lowercase().contains(&query)
-                    || s.initial_prompt.to_lowercase().contains(&query)
-                    || s.cwd.to_lowercase().contains(&query)
-                    || format!("{:?}", s.status).to_lowercase().contains(&query)
-            })
+            .filter(|(_, s)| Self::session_matches(s, &query))
             .map(|(i, _)| i)
             .collect()
+    }
+
+    fn session_matches(s: &AgentSession, query: &str) -> bool {
+        s.project_name.to_lowercase().contains(query)
+            || s.model.to_lowercase().contains(query)
+            || s.session_id.to_lowercase().contains(query)
+            || s.initial_prompt.to_lowercase().contains(query)
+            || s.cwd.to_lowercase().contains(query)
+            || format!("{:?}", s.status).to_lowercase().contains(query)
+    }
+
+    /// Ensure `selected` points to a session included in the current filter.
+    /// No-op when no sessions match; otherwise snaps to the first visible.
+    fn clamp_selection_to_visible(&mut self) {
+        let visible = self.visible_indices();
+        if visible.is_empty() {
+            return;
+        }
+        if !visible.contains(&self.selected) {
+            self.selected = visible[0];
+        }
+    }
+
+    pub fn filter_push(&mut self, c: char) {
+        self.filter_text.push(c);
+        self.clamp_selection_to_visible();
+    }
+
+    pub fn filter_pop(&mut self) {
+        self.filter_text.pop();
+        self.clamp_selection_to_visible();
+    }
+
+    pub fn clear_filter(&mut self) {
+        self.filter_active = false;
+        self.filter_text.clear();
     }
 
     pub fn select_next(&mut self) {
@@ -232,8 +320,8 @@ impl App {
             if pos + 1 < visible.len() {
                 self.selected = visible[pos + 1];
             }
-        } else if let Some(&first) = visible.first() {
-            self.selected = first;
+        } else {
+            self.selected = visible[0];
         }
     }
 
@@ -244,8 +332,8 @@ impl App {
             if pos > 0 {
                 self.selected = visible[pos - 1];
             }
-        } else if let Some(&last) = visible.last() {
-            self.selected = last;
+        } else {
+            self.selected = *visible.last().unwrap();
         }
     }
 

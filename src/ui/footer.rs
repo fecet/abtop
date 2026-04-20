@@ -43,6 +43,10 @@ pub(crate) fn draw_footer(f: &mut Frame, app: &App, area: Rect, theme: &Theme) {
     spans.push(Span::styled(" quit ", Style::default().fg(theme.main_fg)));
     spans.push(Span::styled("t", Style::default().fg(theme.hi_fg)));
     spans.push(Span::styled(" theme ", Style::default().fg(theme.main_fg)));
+    spans.push(Span::styled("1-5", Style::default().fg(theme.hi_fg)));
+    spans.push(Span::styled(" panels ", Style::default().fg(theme.main_fg)));
+    spans.push(Span::styled("c", Style::default().fg(theme.hi_fg)));
+    spans.push(Span::styled(" config ", Style::default().fg(theme.main_fg)));
 
     // Show active filter or transient status
     if !app.filter_text.is_empty() {
