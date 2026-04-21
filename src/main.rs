@@ -153,6 +153,7 @@ fn run_app(terminal: &mut Terminal<CrosstermBackend<io::Stdout>>, demo_mode: boo
                             KeyCode::Char('X') if !demo_mode => app.kill_orphan_ports(),
                             KeyCode::Char('t') => app.cycle_theme(),
                             KeyCode::Char('T') => app.tree_view = !app.tree_view,
+                            KeyCode::Char('l') | KeyCode::Char('L') => app.toggle_timeline(),
                             KeyCode::Char(c @ '1'..='5') => app.toggle_panel(c as u8 - b'0'),
                             KeyCode::Char('c') => app.toggle_config(),
                             KeyCode::Char('/') => app.filter_active = true,

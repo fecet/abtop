@@ -49,6 +49,17 @@ pub struct SubAgent {
     pub tokens: u64,
 }
 
+/// A single tool invocation from a session transcript.
+#[derive(Debug, Clone)]
+pub struct ToolCall {
+    /// Tool name: "Read", "Edit", "Bash", "Write", "Grep", "Glob", "Agent", etc.
+    pub name: String,
+    /// Short argument (file path, command prefix, pattern).
+    pub arg: String,
+    /// Duration in milliseconds (0 if unknown).
+    pub duration_ms: u64,
+}
+
 #[derive(Debug, Clone)]
 pub struct AgentSession {
     /// Which CLI tool this session belongs to: "claude", "codex", etc.
@@ -90,6 +101,8 @@ pub struct AgentSession {
     pub initial_prompt: String,
     /// First assistant response text (text blocks only) — used as summary fallback
     pub first_assistant_text: String,
+    /// Timeline of tool calls extracted from transcript.
+    pub tool_calls: Vec<ToolCall>,
 }
 
 impl AgentSession {
@@ -190,6 +203,7 @@ mod tests {
             children: Vec::new(),
             initial_prompt: String::new(),
             first_assistant_text: String::new(),
+            tool_calls: Vec::new(),
         }
     }
 

@@ -272,6 +272,7 @@ impl CodexCollector {
             children,
             initial_prompt: result.initial_prompt,
             first_assistant_text: String::new(),
+            tool_calls: vec![],
         }, rate_limit))
     }
 

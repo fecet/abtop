@@ -320,6 +320,11 @@ impl ClaudeCollector {
                         prev.last_activity = delta.last_activity;
                     }
                     prev.token_history.extend(delta.token_history);
+                    if prev.tool_calls.len() < 500 {
+                        let remaining = 500 - prev.tool_calls.len();
+                        prev.tool_calls.extend(delta.tool_calls.into_iter().take(remaining));
+                    }
+                    prev.last_assistant_ts_ms = delta.last_assistant_ts_ms;
                     if prev.initial_prompt.is_empty() && !delta.initial_prompt.is_empty() {
                         prev.initial_prompt = delta.initial_prompt;
                     }
@@ -352,6 +357,7 @@ impl ClaudeCollector {
             token_history: Vec::new(),
             initial_prompt: String::new(),
             first_assistant_text: String::new(),
+            tool_calls: Vec::new(), last_assistant_ts_ms: 0,
         };
         let cached = self
             .transcript_cache
@@ -375,6 +381,7 @@ impl ClaudeCollector {
         let compaction_count = cached.compaction_count;
         let initial_prompt = cached.initial_prompt.clone();
         let first_assistant_text = cached.first_assistant_text.clone();
+        let tool_calls = cached.tool_calls.clone();
 
         if !pid_alive {
             return None;
@@ -498,6 +505,7 @@ impl ClaudeCollector {
             children,
             initial_prompt,
             first_assistant_text,
+            tool_calls,
         })
     }
 
@@ -865,6 +873,10 @@ struct TranscriptResult {
     initial_prompt: String,
     /// First assistant response text (text blocks only, no tool_use)
     first_assistant_text: String,
+    /// Tool call timeline extracted from transcript.
+    tool_calls: Vec<crate::model::ToolCall>,
+    /// Timestamp of the last assistant turn (epoch ms), used to compute tool duration.
+    last_assistant_ts_ms: u64,
 }
 
 /// Check if a path is a symlink without following it.
@@ -914,6 +926,8 @@ fn parse_transcript(path: &Path, from_offset: u64) -> TranscriptResult {
         token_history: Vec::new(),
         initial_prompt: String::new(),
         first_assistant_text: String::new(),
+        tool_calls: Vec::new(),
+        last_assistant_ts_ms: 0,
     };
 
     let file = match fs::File::open(path) {
@@ -995,6 +1009,13 @@ fn parse_transcript(path: &Path, from_offset: u64) -> TranscriptResult {
                 };
                 bytes_read += n as u64;
                 {
+                    // Parse timestamp from any entry (for tool duration calculation)
+                    let entry_ts_ms = val.get("timestamp")
+                        .and_then(|t| t.as_str())
+                        .and_then(|ts| chrono::DateTime::parse_from_rfc3339(ts).ok())
+                        .map(|dt| dt.timestamp_millis().max(0) as u64)
+                        .unwrap_or(0);
+
                     match val.get("type").and_then(|t| t.as_str()) {
                         Some("assistant") => {
                             result.turn_count += 1;
@@ -1026,11 +1047,7 @@ fn parse_transcript(path: &Path, from_offset: u64) -> TranscriptResult {
                                     result.total_output += out;
                                     result.total_cache_read += cr;
                                     result.total_cache_create += cc;
-                                    // Context = what the model actually "sees" in its window:
-                                    // input_tokens (fresh) + cache_read (reused from cache).
-                                    // cache_creation is excluded — it's a write-side cost for
-                                    // future requests, not content in the current context window.
-                                    // Including it caused context_percent > 100% (#54).
+                                    // Context = input_tokens + cache_read (excludes cache_creation, #54)
                                     let prev_context = result.last_context_tokens;
                                     result.last_context_tokens = inp + cr;
                                     if result.last_context_tokens > result.max_context_tokens {
@@ -1042,11 +1059,9 @@ fn parse_transcript(path: &Path, from_offset: u64) -> TranscriptResult {
                                     {
                                         result.compaction_count += 1;
                                     }
-                                    // Track context evolution (cap to prevent OOM)
                                     if result.context_history.len() < 10_000 {
                                         result.context_history.push(result.last_context_tokens);
                                     }
-                                    // Track per-turn total tokens for sparkline (cap to prevent OOM)
                                     if result.token_history.len() < 10_000 {
                                         result.token_history.push(inp + out + cr + cc);
                                     }
@@ -1081,10 +1096,10 @@ fn parse_transcript(path: &Path, from_offset: u64) -> TranscriptResult {
                                         }
                                     }
                                 }
-                                // Extract last tool_use from latest turn (= most recently running)
+                                // Extract ALL tool_use entries for timeline + last for current_task
                                 if let Some(content) = msg.get("content").and_then(|c| c.as_array())
                                 {
-                                    for item in content.iter().rev() {
+                                    for item in content {
                                         if item.get("type").and_then(|t| t.as_str())
                                             == Some("tool_use")
                                         {
@@ -1094,13 +1109,41 @@ fn parse_transcript(path: &Path, from_offset: u64) -> TranscriptResult {
                                                 .unwrap_or("?");
                                             let arg = extract_tool_arg(item);
                                             result.current_task = format!("{} {}", tool, arg);
-                                            break;
+                                            if result.tool_calls.len() < 500 {
+                                                result.tool_calls.push(crate::model::ToolCall {
+                                                    name: tool.to_string(),
+                                                    arg: truncate(&arg, 40),
+                                                    duration_ms: 0, // filled on next user turn
+                                                });
+                                            }
                                         }
                                     }
+                                }
+                                // Save timestamp for duration calculation
+                                if entry_ts_ms > 0 {
+                                    result.last_assistant_ts_ms = entry_ts_ms;
                                 }
                             }
                         }
                         Some("user") => {
+                            // Compute tool call duration: time from assistant turn to this user turn
+                            if entry_ts_ms > 0 && result.last_assistant_ts_ms > 0 {
+                                let duration = entry_ts_ms.saturating_sub(result.last_assistant_ts_ms);
+                                // Distribute duration across tool calls from that assistant turn
+                                // (approximation: divide equally among pending zero-duration calls)
+                                let pending: Vec<usize> = result.tool_calls.iter().enumerate()
+                                    .rev()
+                                    .take_while(|(_, tc)| tc.duration_ms == 0)
+                                    .map(|(i, _)| i)
+                                    .collect();
+                                if !pending.is_empty() {
+                                    let per_call = duration / pending.len() as u64;
+                                    for idx in pending {
+                                        result.tool_calls[idx].duration_ms = per_call;
+                                    }
+                                }
+                                result.last_assistant_ts_ms = 0;
+                            }
                             if let Some(v) = val.get("version").and_then(|v| v.as_str()) {
                                 result.version = v.to_string();
                             }
