@@ -449,7 +449,6 @@ impl ClaudeCollector {
         let current_task = cached.current_task.clone();
         let version = cached.version.clone();
         let git_branch = cached.git_branch.clone();
-        let last_activity = cached.last_activity;
         let token_history = cached.token_history.clone();
         let context_history = cached.context_history.clone();
         let compaction_count = cached.compaction_count;
@@ -462,32 +461,27 @@ impl ClaudeCollector {
             return None;
         }
 
-        // Status is best-effort. The two signals we trust:
+        // Status is best-effort. Signals we trust:
         //   1. Active descendant CPU → tool is running.
-        //   2. Transcript mtime advanced recently AND the trailing line
-        //      is a user message → the model is actually generating.
+        //   2. last_user_ts_ms > 0 → trailing transcript line is a real
+        //      user prompt with no assistant reply yet, so the model is
+        //      generating. tool_result wrappers are skipped at the
+        //      parser level so this only fires for actual prompts.
         //
-        // Notes on what we *don't* trust:
-        //   - `ps -o %cpu` is a cumulative lifetime average, so a long
-        //     session that worked earlier still reads >1% when idle.
-        //   - mtime alone fires on just-finished assistant turns too
-        //     (file was just touched, but the agent is now waiting on
-        //     the next user prompt). Pairing mtime with last_user_ts_ms
-        //     drops that false positive.
+        // We drop the mtime freshness gate intentionally: Claude Code
+        // writes the assistant turn atomically when it lands, so during
+        // a long streamed reply the file isn't touched and mtime would
+        // go stale. Without the gate the status now matches the live
+        // "Think" row in the timeline (both keyed off last_user_ts_ms),
+        // and an idle session can't get stuck Thinking because the
+        // tool_result skip means last_user only flips on real prompts.
         let status = {
             let has_active_descendant =
                 process::has_active_descendant(sf.pid, children_map, process_info, 5.0);
-            let since_activity = std::time::SystemTime::now()
-                .duration_since(last_activity)
-                .unwrap_or_default();
-            // 5s window ≈ ~2-3 polling ticks. Long enough to bridge
-            // brief flush gaps during a streamed reply, short enough
-            // that an idle session settles into Waiting after one tick.
-            let transcript_active = since_activity.as_secs() < 5;
             let model_generating = cached.last_user_ts_ms > 0;
             if has_active_descendant {
                 SessionStatus::Executing
-            } else if transcript_active && model_generating {
+            } else if model_generating {
                 SessionStatus::Thinking
             } else {
                 SessionStatus::Waiting

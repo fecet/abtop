@@ -167,24 +167,18 @@ impl CodexCollector {
         // so task_complete alone does NOT mean the session is finished when PID is alive.
         // However, for exec (one-shot) sessions, task_complete means truly done.
         let pid_alive = proc.is_some();
-        // Mirrors Claude's combined gate (recent rollout activity AND
-        // the trailing event is a user_message). Either signal alone
-        // misfires: lifetime CPU from `ps` over-fires on long sessions,
-        // and mtime alone over-fires on just-finished agent_message
-        // turns when the user has not yet sent the next prompt.
+        // Mirrors Claude: trust the trailing-event-is-user signal alone.
+        // Codex tool outputs flow through response_item, not user_message,
+        // so model_generating only flips on real prompts.
         let status = if !pid_alive || (is_exec && result.task_complete) {
             SessionStatus::Done
         } else {
             let has_active_child = pid.is_some_and(|p| {
                 process::has_active_descendant(p, children_map, process_info, 5.0)
             });
-            let since_activity = std::time::SystemTime::now()
-                .duration_since(result.last_activity)
-                .unwrap_or_default();
-            let transcript_active = since_activity.as_secs() < 5;
             if has_active_child {
                 SessionStatus::Executing
-            } else if transcript_active && result.model_generating {
+            } else if result.model_generating {
                 SessionStatus::Thinking
             } else {
                 SessionStatus::Waiting
