@@ -467,11 +467,20 @@ impl ClaudeCollector {
                 .duration_since(last_activity)
                 .unwrap_or_default();
             let has_tool = !current_task.is_empty();
+            // last_user_ts_ms > 0 iff the latest transcript line is a user
+            // message with no assistant follow-up yet — i.e. the model is
+            // actually generating. Without this guard the < 30s branch
+            // misfired Thinking on every just-finished turn (assistant
+            // ended with end_turn → current_task empty → Thinking, even
+            // though the agent is idle waiting for the next prompt).
+            let model_generating = cached.last_user_ts_ms > 0;
             if since_activity.as_secs() < 30 {
                 if has_tool {
                     SessionStatus::Executing
-                } else {
+                } else if model_generating {
                     SessionStatus::Thinking
+                } else {
+                    SessionStatus::Waiting
                 }
             } else {
                 // Transcript stale (>30s): CPU-only signals. 5% descendant
@@ -2646,6 +2655,110 @@ n/Users/bob/.claude-alt/projects/-Users-bob-project/session.jsonl
             &std::collections::HashSet::new(),
         );
         assert_eq!(sid.as_deref(), Some("within-grace"));
+    }
+
+    #[test]
+    fn test_load_session_idle_after_assistant_turn_is_waiting_not_thinking() {
+        // Regression: the < 30s status branch used `current_task.is_empty()`
+        // as a Thinking signal, so any session whose latest assistant turn
+        // was a plain text reply (end_turn, no tool_use) showed up as
+        // Thinking even though the agent was idle waiting for the next
+        // user prompt. Fix routes Thinking through last_user_ts_ms > 0,
+        // which is only true when a user message has no assistant follow-up.
+        let temp = tempfile::tempdir().unwrap();
+        let profile = temp.path().join(".claude");
+        let sessions_dir = profile.join("sessions");
+        let projects = profile.join("projects");
+        let cwd = temp.path().join("repo");
+        std::fs::create_dir_all(&sessions_dir).unwrap();
+        std::fs::create_dir_all(&projects).unwrap();
+        std::fs::create_dir_all(&cwd).unwrap();
+
+        let pid = 9101;
+        let sid = "idle-after-text";
+        let session_path = sessions_dir.join(format!("{}.json", pid));
+        write_session_file(&session_path, pid, sid, &cwd);
+        // write_transcript ends on an assistant text turn → last_user_ts_ms = 0.
+        let transcript = write_transcript(&projects, &cwd, sid, "hello");
+        // Recent mtime → falls into the < 30s branch where the bug lived.
+        set_mtime(&transcript, 0);
+
+        let config = ConfigDir::new(profile.clone());
+        let process_info = make_proc_info(pid, "claude");
+        let mut collector = ClaudeCollector::new();
+        collector.config_dirs = vec![config.clone()];
+
+        let session_paths = vec![(session_path, config)];
+        let ctx = build_discovery_context(&session_paths, &process_info);
+        let sessions = collector.load_session_paths(
+            &session_paths,
+            &process_info,
+            &HashMap::new(),
+            &HashMap::new(),
+            &ctx,
+        );
+
+        assert_eq!(sessions.len(), 1);
+        assert_eq!(
+            sessions[0].status,
+            SessionStatus::Waiting,
+            "idle session (last entry is assistant text) must be Waiting, not Thinking",
+        );
+    }
+
+    #[test]
+    fn test_load_session_trailing_user_turn_is_thinking() {
+        // Counterpart to the regression test above: when the latest line in
+        // the transcript is a user message with no assistant reply yet, the
+        // model is genuinely generating and Thinking is correct.
+        let temp = tempfile::tempdir().unwrap();
+        let profile = temp.path().join(".claude");
+        let sessions_dir = profile.join("sessions");
+        let projects = profile.join("projects");
+        let cwd = temp.path().join("repo");
+        std::fs::create_dir_all(&sessions_dir).unwrap();
+        std::fs::create_dir_all(&projects).unwrap();
+        std::fs::create_dir_all(&cwd).unwrap();
+
+        let pid = 9102;
+        let sid = "thinking-after-prompt";
+        let session_path = sessions_dir.join(format!("{}.json", pid));
+        write_session_file(&session_path, pid, sid, &cwd);
+
+        // Transcript ends on a user turn → last_user_ts_ms > 0.
+        let transcript_dir = projects.join(encode_cwd_path(cwd.to_str().unwrap()));
+        std::fs::create_dir_all(&transcript_dir).unwrap();
+        let transcript = transcript_dir.join(format!("{}.jsonl", sid));
+        std::fs::write(
+            &transcript,
+            r#"{"type":"assistant","timestamp":"2026-03-28T15:00:00Z","message":{"model":"claude-sonnet-4-6","usage":{"input_tokens":1,"output_tokens":1,"cache_read_input_tokens":0,"cache_creation_input_tokens":0},"content":[{"type":"text","text":"ok"}]}}
+{"type":"user","timestamp":"2026-03-28T15:00:10Z","message":{"role":"user","content":"next prompt"}}
+"#,
+        )
+        .unwrap();
+        set_mtime(&transcript, 0);
+
+        let config = ConfigDir::new(profile.clone());
+        let process_info = make_proc_info(pid, "claude");
+        let mut collector = ClaudeCollector::new();
+        collector.config_dirs = vec![config.clone()];
+
+        let session_paths = vec![(session_path, config)];
+        let ctx = build_discovery_context(&session_paths, &process_info);
+        let sessions = collector.load_session_paths(
+            &session_paths,
+            &process_info,
+            &HashMap::new(),
+            &HashMap::new(),
+            &ctx,
+        );
+
+        assert_eq!(sessions.len(), 1);
+        assert_eq!(
+            sessions[0].status,
+            SessionStatus::Thinking,
+            "session whose latest entry is a user message must be Thinking",
+        );
     }
 
     #[test]
