@@ -2,6 +2,7 @@ mod app;
 mod collector;
 mod config;
 mod demo;
+mod host_info;
 mod model;
 mod setup;
 mod theme;
@@ -125,7 +126,20 @@ fn run_app(terminal: &mut Terminal<CrosstermBackend<io::Stdout>>, demo_mode: boo
         let had_input = if event::poll(render_interval)? {
             if let Event::Key(key) = event::read()? {
                 if key.kind == KeyEventKind::Press {
-                    if app.config_open {
+                    if app.help_open {
+                        // Any key dismisses help.
+                        app.help_open = false;
+                    } else if app.view_open {
+                        match key.code {
+                            KeyCode::Esc | KeyCode::Char('v') => app.view_open = false,
+                            KeyCode::Char('T') => app.tree_view = !app.tree_view,
+                            KeyCode::Char('l') => app.toggle_timeline(),
+                            KeyCode::Char('f') => app.toggle_file_audit(),
+                            KeyCode::Char(c @ '1'..='5') => app.toggle_panel(c as u8 - b'0'),
+                            KeyCode::Char('t') => app.cycle_theme(),
+                            _ => {}
+                        }
+                    } else if app.config_open {
                         match key.code {
                             KeyCode::Esc | KeyCode::Char('q') => app.toggle_config(),
                             KeyCode::Down | KeyCode::Char('j') => app.config_select_next(),
@@ -156,6 +170,8 @@ fn run_app(terminal: &mut Terminal<CrosstermBackend<io::Stdout>>, demo_mode: boo
                             KeyCode::Char('l') | KeyCode::Char('L') => app.toggle_timeline(),
                             KeyCode::Char(c @ '1'..='5') => app.toggle_panel(c as u8 - b'0'),
                             KeyCode::Char('c') => app.toggle_config(),
+                            KeyCode::Char('v') => app.toggle_view_menu(),
+                            KeyCode::Char('?') => app.toggle_help(),
                             KeyCode::Char('/') => app.filter_active = true,
                             KeyCode::Esc if !app.filter_text.is_empty() => app.clear_filter(),
                             KeyCode::Char('f') | KeyCode::Char('F') => app.toggle_file_audit(),

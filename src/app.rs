@@ -1,4 +1,5 @@
 use crate::collector::{MultiCollector, read_rate_limits};
+use crate::host_info::{AgentAggregate, HostMetrics, HostSampler};
 use crate::model::{AgentSession, OrphanPort, RateLimitInfo, SessionStatus};
 use crate::theme::Theme;
 use std::collections::{HashMap, HashSet, VecDeque};
@@ -75,6 +76,16 @@ pub struct App {
     pub show_timeline: bool,
     pub timeline_scroll: usize,
     pub show_file_audit: bool,
+    /// Host vitals sampler (CPU% delta needs prior snapshot).
+    host_sampler: HostSampler,
+    /// Latest host metrics snapshot (None until first valid sample).
+    pub host_metrics: Option<HostMetrics>,
+    /// Aggregate metrics across all sessions (recomputed each tick).
+    pub agent_aggregate: AgentAggregate,
+    /// Help overlay (`?`) visibility.
+    pub help_open: bool,
+    /// View leader overlay (`v`) visibility.
+    pub view_open: bool,
 }
 
 impl App {
@@ -112,8 +123,24 @@ impl App {
             show_timeline: false,
             timeline_scroll: 0,
             show_file_audit: false,
+            host_sampler: HostSampler::new(),
+            host_metrics: None,
+            agent_aggregate: AgentAggregate::default(),
+            help_open: false,
+            view_open: false,
         }
     }
+
+    pub fn toggle_help(&mut self) {
+        self.help_open = !self.help_open;
+        if self.help_open { self.view_open = false; }
+    }
+
+    pub fn toggle_view_menu(&mut self) {
+        self.view_open = !self.view_open;
+        if self.view_open { self.help_open = false; }
+    }
+
 
     pub fn toggle_panel(&mut self, panel: u8) {
         match panel {
@@ -189,6 +216,8 @@ impl App {
     pub fn tick(&mut self) {
         self.sessions = self.collector.collect();
         self.orphan_ports = self.collector.orphan_ports.clone();
+        self.host_metrics = self.host_sampler.sample();
+        self.agent_aggregate = AgentAggregate::from_sessions(&self.sessions);
         if self.selected >= self.sessions.len() && !self.sessions.is_empty() {
             self.selected = self.sessions.len() - 1;
         }

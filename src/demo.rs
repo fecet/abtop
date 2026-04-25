@@ -356,4 +356,12 @@ pub fn populate_demo(app: &mut App) {
             project_name: "old-project".into(),
         },
     ];
+
+    // --- Host metrics + agent aggregate (demo values) ---
+    app.host_metrics = Some(crate::host_info::HostMetrics {
+        cpu_pct: 23.0,
+        mem_pct: 41.0,
+        load1: 1.8,
+    });
+    app.agent_aggregate = crate::host_info::AgentAggregate::from_sessions(&app.sessions);
 }
