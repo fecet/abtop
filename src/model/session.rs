@@ -108,6 +108,8 @@ pub struct ToolCall {
 #[derive(Debug, Clone)]
 pub struct AgentSession {
     /// Which CLI tool this session belongs to: "claude", "codex", etc.
+    /// Also used as the identifier for the `hidden_agents` config key
+    /// (case-insensitive match).
     pub agent_cli: &'static str,
     pub pid: u32,
     pub session_id: String,

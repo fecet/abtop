@@ -112,12 +112,22 @@ pub struct MultiCollector {
 const SLOW_POLL_INTERVAL: u32 = 5;
 
 impl MultiCollector {
-    pub fn new() -> Self {
+    /// Build a collector, skipping agents whose identifier is in `hidden`.
+    /// Identifiers are matched case-insensitively against each collector's
+    /// `agent_cli` name (e.g. `"claude"`, `"codex"`).
+    pub fn with_hidden(hidden: &[String]) -> Self {
+        let is_hidden = |name: &str| {
+            hidden.iter().any(|h| h.eq_ignore_ascii_case(name))
+        };
+        let mut collectors: Vec<Box<dyn AgentCollector>> = Vec::new();
+        if !is_hidden("claude") {
+            collectors.push(Box::new(ClaudeCollector::new()));
+        }
+        if !is_hidden("codex") {
+            collectors.push(Box::new(CodexCollector::new()));
+        }
         Self {
-            collectors: vec![
-                Box::new(ClaudeCollector::new()),
-                Box::new(CodexCollector::new()),
-            ],
+            collectors,
             tick_count: SLOW_POLL_INTERVAL, // trigger on first tick
             cached_ports: HashMap::new(),
             cached_port_pids: Vec::new(),
@@ -240,6 +250,46 @@ impl MultiCollector {
         self.orphan_ports.sort_by_key(|o| o.port);
 
         all
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn with_hidden_empty_keeps_all_collectors() {
+        let mc = MultiCollector::with_hidden(&[]);
+        assert_eq!(mc.collectors.len(), 2);
+    }
+
+    #[test]
+    fn with_hidden_codex_drops_codex_only() {
+        let mc = MultiCollector::with_hidden(&["codex".to_string()]);
+        assert_eq!(mc.collectors.len(), 1);
+    }
+
+    #[test]
+    fn with_hidden_is_case_insensitive() {
+        let mc = MultiCollector::with_hidden(&["CODEX".to_string()]);
+        assert_eq!(mc.collectors.len(), 1);
+        let mc = MultiCollector::with_hidden(&["Claude".to_string()]);
+        assert_eq!(mc.collectors.len(), 1);
+    }
+
+    #[test]
+    fn with_hidden_unknown_names_are_ignored() {
+        let mc = MultiCollector::with_hidden(&["kiro".to_string(), "gemini".to_string()]);
+        assert_eq!(mc.collectors.len(), 2);
+    }
+
+    #[test]
+    fn with_hidden_all_agents_yields_empty() {
+        let mc = MultiCollector::with_hidden(&[
+            "claude".to_string(),
+            "codex".to_string(),
+        ]);
+        assert!(mc.collectors.is_empty());
     }
 }
 

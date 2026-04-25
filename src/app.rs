@@ -89,7 +89,7 @@ pub struct App {
 }
 
 impl App {
-    pub fn new(theme: Theme) -> Self {
+    pub fn new_with_hidden(theme: Theme, hidden_agents: &[String]) -> Self {
         let (tx, rx) = mpsc::channel();
         let summaries = load_summary_cache();
         Self {
@@ -100,7 +100,7 @@ impl App {
             rate_limits: Vec::new(),
             prev_tokens: HashMap::new(),
             rate_limit_counter: 5,
-            collector: MultiCollector::new(),
+            collector: MultiCollector::with_hidden(hidden_agents),
             summaries,
             pending_summaries: HashSet::new(),
             summary_retries: HashMap::new(),

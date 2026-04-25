@@ -34,6 +34,9 @@ fn main() -> io::Result<()> {
         return Ok(());
     }
 
+    // Load config once; it drives both the default theme and the hidden-agents list.
+    let cfg = config::load_config();
+
     // --theme flag > config file > default
     let initial_theme = std::env::args()
         .position(|a| a == "--theme")
@@ -64,7 +67,6 @@ fn main() -> io::Result<()> {
             })
         })
         .or_else(|| {
-            let cfg = config::load_config();
             theme::Theme::by_name(&cfg.theme)
         });
 
@@ -73,7 +75,10 @@ fn main() -> io::Result<()> {
 
     // --once flag: print snapshot and exit
     if std::env::args().any(|a| a == "--once") {
-        let mut app = App::new(initial_theme.unwrap_or_default());
+        let mut app = App::new_with_hidden(
+            initial_theme.unwrap_or_default(),
+            &cfg.hidden_agents,
+        );
         if demo_mode {
             demo::populate_demo(&mut app);
         } else {
@@ -97,7 +102,7 @@ fn main() -> io::Result<()> {
     stdout().execute(EnterAlternateScreen)?;
     let mut terminal = Terminal::new(CrosstermBackend::new(stdout()))?;
 
-    let app_result = run_app(&mut terminal, demo_mode, initial_theme, exit_on_jump);
+    let app_result = run_app(&mut terminal, demo_mode, initial_theme, exit_on_jump, &cfg.hidden_agents);
 
     // Always attempt both cleanup steps regardless of app result
     let r1 = disable_raw_mode();
@@ -107,8 +112,8 @@ fn main() -> io::Result<()> {
     app_result.and(r1).and(r2)
 }
 
-fn run_app(terminal: &mut Terminal<CrosstermBackend<io::Stdout>>, demo_mode: bool, initial_theme: Option<theme::Theme>, exit_on_jump: bool) -> io::Result<()> {
-    let mut app = App::new(initial_theme.unwrap_or_default());
+fn run_app(terminal: &mut Terminal<CrosstermBackend<io::Stdout>>, demo_mode: bool, initial_theme: Option<theme::Theme>, exit_on_jump: bool, hidden_agents: &[String]) -> io::Result<()> {
+    let mut app = App::new_with_hidden(initial_theme.unwrap_or_default(), hidden_agents);
     if demo_mode {
         demo::populate_demo(&mut app);
     } else {
