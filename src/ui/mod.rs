@@ -2,6 +2,8 @@ mod config;
 mod context;
 mod footer;
 mod header;
+mod help;
+mod view_menu;
 mod ports;
 mod projects;
 mod quota;
@@ -390,6 +392,12 @@ pub fn draw(f: &mut Frame, app: &App) {
 
     if app.config_open {
         config::draw_config_overlay(f, app, theme);
+    }
+    if app.view_open {
+        view_menu::draw_view_overlay(f, app, theme);
+    }
+    if app.help_open {
+        help::draw_help_overlay(f, theme);
     }
 }
 

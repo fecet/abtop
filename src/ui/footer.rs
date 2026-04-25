@@ -39,21 +39,14 @@ pub(crate) fn draw_footer(f: &mut Frame, app: &App, area: Rect, theme: &Theme) {
     spans.push(Span::styled(" kill ", Style::default().fg(theme.main_fg)));
     spans.push(Span::styled("/", Style::default().fg(theme.hi_fg)));
     spans.push(Span::styled(" filter ", Style::default().fg(theme.main_fg)));
-    spans.push(Span::styled("q", Style::default().fg(theme.hi_fg)));
-    spans.push(Span::styled(" quit ", Style::default().fg(theme.main_fg)));
-    spans.push(Span::styled("t", Style::default().fg(theme.hi_fg)));
-    spans.push(Span::styled(" theme ", Style::default().fg(theme.main_fg)));
-    spans.push(Span::styled("T", Style::default().fg(theme.hi_fg)));
-    let tree_label = if app.tree_view { " tree* " } else { " tree " };
-    spans.push(Span::styled(tree_label, Style::default().fg(theme.main_fg)));
-    spans.push(Span::styled("l", Style::default().fg(theme.hi_fg)));
-    spans.push(Span::styled(" timeline ", Style::default().fg(theme.main_fg)));
-    spans.push(Span::styled("1-5", Style::default().fg(theme.hi_fg)));
-    spans.push(Span::styled(" panels ", Style::default().fg(theme.main_fg)));
-    spans.push(Span::styled("f", Style::default().fg(theme.hi_fg)));
-    spans.push(Span::styled(" files ", Style::default().fg(theme.main_fg)));
+    spans.push(Span::styled("v", Style::default().fg(theme.hi_fg)));
+    spans.push(Span::styled(" view ", Style::default().fg(theme.main_fg)));
     spans.push(Span::styled("c", Style::default().fg(theme.hi_fg)));
     spans.push(Span::styled(" config ", Style::default().fg(theme.main_fg)));
+    spans.push(Span::styled("?", Style::default().fg(theme.hi_fg)));
+    spans.push(Span::styled(" help ", Style::default().fg(theme.main_fg)));
+    spans.push(Span::styled("q", Style::default().fg(theme.hi_fg)));
+    spans.push(Span::styled(" quit ", Style::default().fg(theme.main_fg)));
 
     // Show active filter or transient status
     if !app.filter_text.is_empty() {
