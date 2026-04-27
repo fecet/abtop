@@ -381,7 +381,7 @@ impl Theme {
     }
 
     /// Light theme — Solarized Light palette. Cream background with
-    /// muted accents that retain enough chroma to read on a dark terminal.
+    /// muted accents for users on bright terminals.
     pub fn light() -> Self {
         Self {
             name: "light",
