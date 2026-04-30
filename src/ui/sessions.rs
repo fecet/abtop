@@ -21,18 +21,15 @@ pub(crate) fn draw_sessions_panel(f: &mut Frame, app: &App, area: Rect, theme: &
         height: area.height.saturating_sub(2),
     };
 
+    // Table is content-sized (1 header + 2 rows per visible session, +subagents
+    // when tree view is on), capped at half the panel so a long session list can
+    // never starve the detail/timeline pane below. Detail absorbs the remainder.
     let visible = app.visible_indices();
     let session_rows: u16 = visible.iter().map(|&i| {
         let base = 2u16;
         if app.tree_view { base + app.sessions[i].subagents.len() as u16 } else { base }
     }).sum();
-    let detail_reserve: u16 = if app.show_timeline {
-        (inner.height * 2 / 3).min(inner.height.saturating_sub(5))
-    } else {
-        10.min(inner.height / 2)
-    };
-    let max_table = inner.height.saturating_sub(detail_reserve);
-    let table_h = (1 + session_rows).min(max_table);
+    let table_h = session_rows.saturating_add(1).min(inner.height / 2);
 
     let panel_chunks = Layout::default()
         .direction(Direction::Vertical)

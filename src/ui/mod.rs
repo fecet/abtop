@@ -302,7 +302,7 @@ pub fn draw(f: &mut Frame, app: &App) {
 
     let mid_h_ideal: u16 = 8;
     let sessions_ideal: u16 = if app.show_sessions {
-        (app.sessions.len() as u16 * 2 + 7).max(8)
+        (app.sessions.len() as u16 * 2 + 12).max(12)
     } else {
         0
     };
