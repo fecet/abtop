@@ -8,7 +8,7 @@ use ratatui::Frame;
 const ENTRIES: &[(&str, &str)] = &[
     ("Navigation", ""),
     ("  ↑↓ / j k", "select session"),
-    ("  ↵",        "jump to tmux pane (when in tmux)"),
+    ("  ↵",        "jump to session (tmux pane / niri window)"),
     ("  /",        "filter sessions"),
     ("  Esc",      "clear filter / close overlay"),
     ("Actions", ""),

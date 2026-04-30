@@ -2,6 +2,7 @@ use crate::collector::{MultiCollector, read_rate_limits};
 use crate::host_info::{AgentAggregate, HostMetrics, HostSampler};
 use crate::model::{AgentSession, OrphanPort, RateLimitInfo, SessionStatus};
 use crate::theme::Theme;
+use serde::Deserialize;
 use std::collections::{HashMap, HashSet, VecDeque};
 use std::sync::mpsc;
 use std::time::Instant;
@@ -21,16 +22,42 @@ fn sanitize_fallback(prompt: &str, max_len: usize) -> String {
         .collect()
 }
 
-/// Outcome of an Enter-key jump attempt. Distinct from `Option<String>` so
-/// callers (notably `--exit-on-jump`) can tell a real tmux jump apart from
-/// a no-op (outside tmux, or empty session list).
+/// Outcome of a jump/open attempt. Distinct from `Option<String>` so callers
+/// can tell a real focus change apart from a no-op.
 pub enum JumpOutcome {
-    /// Actually switched to a tmux pane.
+    /// Actually focused a target.
     Jumped,
-    /// Tried to jump in tmux but no pane owns the session's PID.
+    /// Tried to jump/open but the target could not be found or focused.
     Failed(String),
-    /// Not in tmux, or nothing selected — nothing happened.
+    /// Nothing selected, or the backend is unavailable for this mode.
     NoOp,
+}
+
+#[derive(Clone, Debug, Deserialize)]
+struct NiriWindow {
+    id: u64,
+    app_id: Option<String>,
+    pid: Option<u32>,
+    title: Option<String>,
+    workspace_id: Option<u64>,
+}
+
+#[derive(Clone, Debug, Deserialize)]
+struct NiriWorkspace {
+    id: u64,
+    idx: u64,
+    name: Option<String>,
+}
+
+impl NiriWindow {
+    fn label(&self) -> String {
+        self.title
+            .as_deref()
+            .filter(|title| !title.is_empty())
+            .or(self.app_id.as_deref())
+            .map(ToString::to_string)
+            .unwrap_or_else(|| format!("window {}", self.id))
+    }
 }
 
 pub struct App {
@@ -499,18 +526,25 @@ impl App {
     }
 
     /// Jump to the terminal running the selected session's Claude process.
-    /// In tmux: switch to the pane. Otherwise: no-op.
+    /// In tmux: switch to the pane. On niri (outside tmux): focus the window.
+    /// Otherwise: no-op.
     pub fn jump_to_session(&mut self) -> JumpOutcome {
         if self.sessions.is_empty() {
             return JumpOutcome::NoOp;
         }
-        if std::env::var("TMUX").is_err() {
-            return JumpOutcome::NoOp;
-        }
         let target_pid = self.sessions[self.selected].pid;
-        match self.jump_via_tmux(target_pid) {
-            None => JumpOutcome::Jumped,
-            Some(msg) => JumpOutcome::Failed(msg),
+        if std::env::var("TMUX").is_ok() {
+            return match self.jump_via_tmux(target_pid) {
+                None => JumpOutcome::Jumped,
+                Some(msg) => JumpOutcome::Failed(msg),
+            };
+        }
+        match self.focus_via_niri(target_pid) {
+            Ok(label) => {
+                self.set_status(format!("focused {}", label));
+                JumpOutcome::Jumped
+            }
+            Err(msg) => JumpOutcome::Failed(msg),
         }
     }
 
@@ -552,6 +586,37 @@ impl App {
         }
 
         Some("pane not found".to_string())
+    }
+
+    fn focus_via_niri(&self, target_pid: u32) -> Result<String, String> {
+        let window = find_niri_window_for_pid(target_pid)?;
+
+        // Two-step focus: first switch to the target's workspace, then focus
+        // the window. Splitting it lets niri tear down per-workspace state
+        // (incl. layer-shell visibility) before granting toplevel focus.
+        if let Some(ws_id) = window.workspace_id {
+            if let Some(ws_ref) = find_niri_workspace_ref(ws_id) {
+                let _ = std::process::Command::new("niri")
+                    .args(["msg", "action", "focus-workspace", &ws_ref])
+                    .output();
+            }
+        }
+
+        let output = std::process::Command::new("niri")
+            .args(["msg", "action", "focus-window", "--id", &window.id.to_string()])
+            .output()
+            .map_err(|_| "niri is not available".to_string())?;
+
+        if output.status.success() {
+            Ok(window.label())
+        } else {
+            let stderr = String::from_utf8_lossy(&output.stderr).trim().to_string();
+            if stderr.is_empty() {
+                Err(format!("failed to focus niri window {}", window.id))
+            } else {
+                Err(format!("niri focus failed: {}", sanitize_fallback(&stderr, 80)))
+            }
+        }
     }
 
     /// Get the display summary for a session: LLM summary > "..." if pending > raw prompt > "—"
@@ -708,6 +773,50 @@ fn load_summary_cache() -> HashMap<String, String> {
         }
         Err(_) => HashMap::new(),
     }
+}
+
+fn find_niri_workspace_ref(workspace_id: u64) -> Option<String> {
+    let output = std::process::Command::new("niri")
+        .args(["msg", "-j", "workspaces"])
+        .output()
+        .ok()?;
+    if !output.status.success() {
+        return None;
+    }
+    let workspaces: Vec<NiriWorkspace> = serde_json::from_slice(&output.stdout).ok()?;
+    let ws = workspaces.into_iter().find(|w| w.id == workspace_id)?;
+    Some(ws.name.unwrap_or_else(|| ws.idx.to_string()))
+}
+
+fn find_niri_window_for_pid(target_pid: u32) -> Result<NiriWindow, String> {
+    let output = std::process::Command::new("niri")
+        .args(["msg", "-j", "windows"])
+        .output()
+        .map_err(|_| "niri is not available".to_string())?;
+    if !output.status.success() {
+        return Err("niri windows unavailable".to_string());
+    }
+
+    let windows: Vec<NiriWindow> = serde_json::from_slice(&output.stdout)
+        .map_err(|_| "niri windows returned invalid JSON".to_string())?;
+    let mut windows_with_pid = Vec::new();
+    for window in windows {
+        if let Some(pid) = window.pid {
+            windows_with_pid.push((pid, window));
+        }
+    }
+
+    if windows_with_pid.is_empty() {
+        return Err("no niri windows expose a PID".to_string());
+    }
+
+    for (window_pid, window) in windows_with_pid {
+        if is_descendant_of(target_pid, window_pid) {
+            return Ok(window);
+        }
+    }
+
+    Err(format!("no niri window owns PID {}", target_pid))
 }
 
 /// Check if `target` PID is a descendant of `ancestor` PID by walking the process tree.
