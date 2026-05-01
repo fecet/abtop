@@ -312,7 +312,7 @@ impl ClaudeCollector {
             return None;
         }
 
-        let project_name = sf.cwd.rsplit('/').next().unwrap_or("?").to_string();
+        let project_name = sf.cwd.rsplit(|c| c == '/' || c == '\\').next().unwrap_or("?").to_string();
 
         let proc = process_info.get(&sf.pid);
         let mem_mb = proc.map(|p| p.rss_kb / 1024).unwrap_or(0);
@@ -1501,7 +1501,7 @@ fn is_tool_result_user_msg(message: Option<&Value>) -> bool {
 fn encode_cwd_path(cwd: &str) -> String {
     cwd.chars()
         .map(|c| match c {
-            '/' | '_' | '.' => '-',
+            '/' | '\\' | ':' | '_' | '.' => '-',
             _ => c,
         })
         .collect()
@@ -1582,7 +1582,7 @@ fn extract_tool_arg(tool_use: &Value) -> String {
 }
 
 fn shorten_path(path: &str) -> String {
-    let parts: Vec<&str> = path.rsplit('/').collect();
+    let parts: Vec<&str> = path.rsplit(|c| c == '/' || c == '\\').collect();
     if parts.len() <= 2 {
         path.to_string()
     } else {
