@@ -1678,8 +1678,44 @@ fn read_env_var_from_proc(pid: u32, var_name: &str) -> Option<String> {
     parse_environ_var(&data, var_name)
 }
 
-/// Stub for non-Linux platforms where /proc is not available.
-#[cfg(not(target_os = "linux"))]
+/// Read a single environment variable from a running process on Windows.
+/// Uses PowerShell to query the process environment block via WMI/CIM.
+#[cfg(target_os = "windows")]
+fn read_env_var_from_proc(pid: u32, var_name: &str) -> Option<String> {
+    use std::process::Command;
+    let script = format!(
+        "(Get-CimInstance Win32_Process -Filter 'ProcessId={}').CommandLine",
+        pid
+    );
+    let output = Command::new("powershell")
+        .args(["-NoProfile", "-Command", &script])
+        .output()
+        .ok()?;
+    if !output.status.success() {
+        return None;
+    }
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    let cmd_line = stdout.trim();
+    // Parse CLAUDE_CONFIG_DIR from command line arguments:
+    // Look for --config-dir <path> or similar patterns
+    let args: Vec<&str> = cmd_line.split_whitespace().collect();
+    for i in 0..args.len() {
+        if args[i] == "--config-dir" || args[i] == "--config" {
+            if let Some(val) = args.get(i + 1) {
+                return Some(val.to_string());
+            }
+        }
+        if let Some(val) = args[i].strip_prefix("--config-dir=") {
+            return Some(val.to_string());
+        }
+    }
+    // Fallback: check abtop's own environment (already done in refresh_config_dirs,
+    // but this covers the case where the target process has a different value)
+    std::env::var(var_name).ok()
+}
+
+/// Stub for other non-Linux platforms where /proc is not available.
+#[cfg(all(not(target_os = "linux"), not(target_os = "windows")))]
 fn read_env_var_from_proc(_pid: u32, _var_name: &str) -> Option<String> {
     None
 }

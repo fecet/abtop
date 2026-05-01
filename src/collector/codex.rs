@@ -5,7 +5,7 @@ use std::collections::HashMap;
 use std::fs;
 use std::io::{BufRead, BufReader, Read};
 use std::path::{Path, PathBuf};
-#[cfg(not(target_os = "linux"))]
+#[cfg(all(not(target_os = "linux"), not(target_os = "windows")))]
 use std::process::Command;
 
 /// Collector for OpenAI Codex CLI sessions.
@@ -297,7 +297,8 @@ impl CodexCollector {
     /// Map codex PIDs to their open rollout-*.jsonl files.
     ///
     /// On Linux, scans /proc/{pid}/fd symlinks directly (no process spawn).
-    /// Falls back to lsof on other platforms.
+    /// On Windows, uses sysinfo to get process cwd then scans for rollout files.
+    /// Falls back to lsof on macOS/other platforms.
     fn map_pid_to_jsonl(pids: &[u32]) -> HashMap<u32, PathBuf> {
         let mut map = HashMap::new();
         if pids.is_empty() {
@@ -321,9 +322,37 @@ impl CodexCollector {
             map
         }
 
-        #[cfg(not(target_os = "linux"))]
+        #[cfg(target_os = "windows")]
         {
-            // Fallback: lsof on macOS and other platforms
+            let mut sys = sysinfo::System::new();
+            let pids_sys: Vec<sysinfo::Pid> = pids.iter().copied().map(|p| sysinfo::Pid::from(p as usize)).collect();
+            sys.refresh_processes_specifics(
+                sysinfo::ProcessesToUpdate::Some(&pids_sys),
+                true,
+                sysinfo::ProcessRefreshKind::new().with_memory(),
+            );
+            for &pid_u32 in pids {
+                let pid = sysinfo::Pid::from(pid_u32 as usize);
+                if let Some(proc_) = sys.process(pid) {
+                    if let Some(cwd) = proc_.cwd() {
+                        if let Ok(entries) = fs::read_dir(&cwd) {
+                            for entry in entries.flatten() {
+                                let name = entry.file_name();
+                                let name_str = name.to_string_lossy();
+                                if name_str.starts_with("rollout-") && name_str.ends_with(".jsonl") {
+                                    map.insert(pid_u32, entry.path());
+                                    break;
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+            map
+        }
+
+        #[cfg(all(not(target_os = "linux"), not(target_os = "windows")))]
+        {
             let pid_args: Vec<String> = pids.iter().map(|p| format!("-p{}", p)).collect();
             let mut args = vec!["-F", "pn"];
             for pa in &pid_args {
