@@ -30,6 +30,25 @@ curl --proto '=https' --tlsv1.2 -LsSf https://github.com/graykode/abtop/releases
 cargo install abtop
 ```
 
+### Windows
+
+**Native support** — no WSL required! Uses `sysinfo` for process discovery and `netstat -ano` for ports. All core features work out of the box.
+
+```powershell
+powershell -c "irm https://github.com/graykode/abtop/releases/latest/download/abtop-installer.ps1 | iex"
+```
+
+Or `cargo install abtop` from any terminal with Git in PATH. Claude Code config is resolved automatically from `%USERPROFILE%\.claude`.
+
+### Arch Linux (AUR)
+
+```bash
+# Using an AUR helper
+yay -S abtop
+# Or manually with the PKGBUILD in the repo root
+makepkg -si
+```
+
 ### Other
 
 Pre-built binaries for all platforms are available on the [GitHub Releases](https://github.com/graykode/abtop/releases) page.
@@ -44,14 +63,6 @@ abtop --theme dracula    # Launch with a specific theme
 ```
 
 Recommended terminal size: **120x40** or larger. Minimum 80x24 — panels hide gracefully when small.
-
-### Windows
-
-**Native support** — no WSL required! abtop runs as a native Windows binary (x86_64 and aarch64 via the installer or `cargo install`).
-
-It uses `sysinfo` for process discovery (including full command lines for `claude.exe` / `codex.exe`) and the built-in `netstat -ano` for listening ports. All core features (Claude Code + Codex CLI monitoring, orphan ports, etc.) work out of the box.
-
-Just run the installer or `cargo install abtop` from a Windows terminal with Git (for `git` status) in PATH. Claude Code config lives at `%USERPROFILE%\.claude` (automatically resolved).
 
 ### tmux
 

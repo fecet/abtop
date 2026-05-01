@@ -105,8 +105,7 @@ pub fn get_process_info() -> HashMap<u32, ProcInfo> {
 pub fn get_process_info() -> HashMap<u32, ProcInfo> {
     let mut map = HashMap::new();
     let sys = sysinfo::System::new_with_specifics(
-        sysinfo::RefreshKind::new()
-            .with_processes(sysinfo::ProcessRefreshKind::everything()),
+        sysinfo::RefreshKind::everything(),
     );
     for (pid, proc) in sys.processes() {
         let pid = pid.as_u32();
