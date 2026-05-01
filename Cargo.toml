@@ -28,6 +28,9 @@ proc_pidinfo = "0.1"
 [target.'cfg(target_os = "linux")'.dependencies]
 libc = "0.2"
 
+[target.'cfg(target_os = "windows")'.dependencies]
+sysinfo = "0.32"
+
 # The profile that 'dist' will build with
 [profile.dist]
 inherits = "release"

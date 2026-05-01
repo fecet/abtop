@@ -101,7 +101,42 @@ pub fn get_process_info() -> HashMap<u32, ProcInfo> {
     map
 }
 
-#[cfg(not(target_os = "linux"))]
+#[cfg(target_os = "windows")]
+pub fn get_process_info() -> HashMap<u32, ProcInfo> {
+    let mut map = HashMap::new();
+    let sys = sysinfo::System::new_with_specifics(
+        sysinfo::RefreshKind::new()
+            .with_processes(sysinfo::ProcessRefreshKind::everything()),
+    );
+    for (pid, proc) in sys.processes() {
+        let pid = pid.as_u32();
+        let ppid = proc.parent().map_or(0u32, |p| p.as_u32());
+        let rss_kb = proc.memory() / 1024;
+        let cpu_pct = proc.cpu_usage() as f64;
+        let command = if proc.cmd().is_empty() {
+            proc.name().to_string_lossy().into_owned()
+        } else {
+            proc.cmd()
+                .iter()
+                .map(|s| s.to_string_lossy().into_owned())
+                .collect::<Vec<_>>()
+                .join(" ")
+        };
+        if command.trim().is_empty() {
+            continue;
+        }
+        map.insert(pid, ProcInfo {
+            pid,
+            ppid,
+            rss_kb,
+            cpu_pct,
+            command,
+        });
+    }
+    map
+}
+
+#[cfg(all(not(target_os = "linux"), not(target_os = "windows")))]
 pub fn get_process_info() -> HashMap<u32, ProcInfo> {
     let mut map = HashMap::new();
     let output = Command::new("ps")
@@ -228,7 +263,43 @@ pub fn get_listening_ports() -> HashMap<u32, Vec<u16>> {
     map
 }
 
-#[cfg(not(target_os = "linux"))]
+#[cfg(target_os = "windows")]
+pub fn get_listening_ports() -> HashMap<u32, Vec<u16>> {
+    let mut map: HashMap<u32, Vec<u16>> = HashMap::new();
+    // Use built-in netstat (available on all Windows) - native, no extra tools.
+    let output = Command::new("netstat")
+        .args(["-ano"])
+        .output()
+        .ok();
+
+    if let Some(output) = output {
+        let stdout = String::from_utf8_lossy(&output.stdout);
+        for line in stdout.lines() {
+            let line = line.trim();
+            if !line.contains("LISTENING") || !line.starts_with("TCP") {
+                continue;
+            }
+            let parts: Vec<&str> = line.split_whitespace().collect();
+            if parts.len() < 5 {
+                continue;
+            }
+            // PID is last column
+            if let Ok(pid) = parts.last().unwrap_or(&"").parse::<u32>() {
+                // Local addr column (index 1): 0.0.0.0:3000 or [::]:8080
+                if let Some(addr) = parts.get(1) {
+                    if let Some(port_str) = addr.rsplit(':').next() {
+                        if let Ok(port) = port_str.parse::<u16>() {
+                            map.entry(pid).or_default().push(port);
+                        }
+                    }
+                }
+            }
+        }
+    }
+    map
+}
+
+#[cfg(all(not(target_os = "linux"), not(target_os = "windows")))]
 pub fn get_listening_ports() -> HashMap<u32, Vec<u16>> {
     let mut map: HashMap<u32, Vec<u16>> = HashMap::new();
     let output = Command::new("lsof")
@@ -261,11 +332,21 @@ pub fn get_listening_ports() -> HashMap<u32, Vec<u16>> {
 /// Check if a command string has a given binary name in executable position.
 /// Checks the first two argv tokens only (covers direct invocation and
 /// interpreter-wrapped scripts like `node /path/to/codex ...`).
+/// Cross-platform: handles Windows `\` and `.exe`/`.bat` suffixes, case-insensitive.
 pub fn cmd_has_binary(cmd: &str, name: &str) -> bool {
     let mut tokens = cmd.split_whitespace().take(2);
     tokens.any(|tok| {
-        let base = tok.rsplit('/').next().unwrap_or(tok);
-        base == name
+        let base = tok.rsplit(|c| c == '/' || c == '\\').next().unwrap_or(tok);
+        #[cfg(windows)]
+        let base = base
+            .strip_suffix(".exe")
+            .or_else(|| base.strip_suffix(".bat"))
+            .or_else(|| base.strip_suffix(".cmd"))
+            .unwrap_or(base);
+        #[cfg(windows)]
+        return base.eq_ignore_ascii_case(name);
+        #[cfg(not(windows))]
+        return base == name;
     })
 }
 

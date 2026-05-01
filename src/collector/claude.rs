@@ -1096,12 +1096,18 @@ fn is_symlink(path: &Path) -> bool {
         .unwrap_or(true)
 }
 
-/// Get file identity as (inode, mtime_nanos) for detecting file replacement.
+/// Returns `(inode, mtime_nanos)` for detecting file replacement (e.g. transcript rotation).
+/// On Windows, inode is always 0; rotation is detected via mtime only.
 fn file_identity(path: &Path) -> (u64, u64) {
     fs::metadata(path)
         .ok()
         .map(|m| {
+            #[cfg(unix)]
             let ino = m.ino();
+            #[cfg(windows)]
+            let ino = 0;
+            #[cfg(not(any(unix, windows)))]
+            let ino = 0u64;
             let mtime_ns = m
                 .modified()
                 .ok()
@@ -1110,7 +1116,7 @@ fn file_identity(path: &Path) -> (u64, u64) {
                 .unwrap_or(0);
             (ino, mtime_ns)
         })
-        .unwrap_or((0, 0))
+        .unwrap_or((0u64, 0u64))
 }
 
 fn parse_transcript(path: &Path, from_offset: u64) -> TranscriptResult {
@@ -1654,13 +1660,12 @@ mod tests {
     }
 
     fn write_session_file(path: &Path, pid: u32, session_id: &str, cwd: &Path) {
+        let cwd_json = serde_json::to_string(&cwd.to_string_lossy().as_ref()).unwrap();
         std::fs::write(
             path,
             format!(
-                r#"{{"pid":{},"sessionId":"{}","cwd":"{}","startedAt":1774715116826}}"#,
-                pid,
-                session_id,
-                cwd.display()
+                r#"{{"pid":{},"sessionId":"{}","cwd":{},"startedAt":1774715116826}}"#,
+                pid, session_id, cwd_json
             ),
         )
         .unwrap();
@@ -2038,6 +2043,7 @@ n/Users/bob/.claude-alt/projects/-Users-bob-project/session.jsonl
         );
     }
 
+    #[cfg(unix)]
     #[test]
     fn test_find_session_file_for_pid_rejects_symlinked_session_files() {
         let temp = tempfile::tempdir().unwrap();
@@ -2115,6 +2121,7 @@ n/Users/bob/.claude-alt/projects/-Users-bob-project/session.jsonl
         );
     }
 
+    #[cfg(unix)]
     #[test]
     fn test_resolve_project_dir_rejects_symlinked_matches() {
         let temp = tempfile::tempdir().unwrap();
@@ -2153,6 +2160,7 @@ n/Users/bob/.claude-alt/projects/-Users-bob-project/session.jsonl
         );
     }
 
+    #[cfg(not(target_os = "windows"))]
     #[test]
     fn test_open_paths_without_cwd_loads_session_from_same_config_root() {
         let temp = tempfile::tempdir().unwrap();
