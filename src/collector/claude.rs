@@ -1096,12 +1096,18 @@ fn is_symlink(path: &Path) -> bool {
         .unwrap_or(true)
 }
 
-/// Get file identity as (inode, mtime_nanos) for detecting file replacement.
+/// Returns `(inode, mtime_nanos)` for detecting file replacement (e.g. transcript rotation).
+/// On Windows, inode is always 0; rotation is detected via mtime only.
 fn file_identity(path: &Path) -> (u64, u64) {
     fs::metadata(path)
         .ok()
         .map(|m| {
+            #[cfg(unix)]
             let ino = m.ino();
+            #[cfg(windows)]
+            let ino = 0;
+            #[cfg(not(any(unix, windows)))]
+            let ino = 0u64;
             let mtime_ns = m
                 .modified()
                 .ok()
@@ -1110,7 +1116,7 @@ fn file_identity(path: &Path) -> (u64, u64) {
                 .unwrap_or(0);
             (ino, mtime_ns)
         })
-        .unwrap_or((0, 0))
+        .unwrap_or((0u64, 0u64))
 }
 
 fn parse_transcript(path: &Path, from_offset: u64) -> TranscriptResult {
@@ -2038,6 +2044,7 @@ n/Users/bob/.claude-alt/projects/-Users-bob-project/session.jsonl
         );
     }
 
+    #[cfg(unix)]
     #[test]
     fn test_find_session_file_for_pid_rejects_symlinked_session_files() {
         let temp = tempfile::tempdir().unwrap();
@@ -2115,6 +2122,7 @@ n/Users/bob/.claude-alt/projects/-Users-bob-project/session.jsonl
         );
     }
 
+    #[cfg(unix)]
     #[test]
     fn test_resolve_project_dir_rejects_symlinked_matches() {
         let temp = tempfile::tempdir().unwrap();
