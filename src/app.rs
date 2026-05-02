@@ -66,6 +66,7 @@ pub struct App {
     pub show_context: bool,
     pub show_quota: bool,
     pub show_tokens: bool,
+    pub show_projects: bool,
     pub show_ports: bool,
     pub show_sessions: bool,
     pub config_open: bool,
@@ -113,6 +114,7 @@ impl App {
             show_context: true,
             show_quota: true,
             show_tokens: true,
+            show_projects: true,
             show_ports: true,
             show_sessions: true,
             config_open: false,
@@ -147,8 +149,9 @@ impl App {
             1 => self.show_context = !self.show_context,
             2 => self.show_quota = !self.show_quota,
             3 => self.show_tokens = !self.show_tokens,
-            4 => self.show_ports = !self.show_ports,
-            5 => self.show_sessions = !self.show_sessions,
+            4 => self.show_projects = !self.show_projects,
+            5 => self.show_ports = !self.show_ports,
+            6 => self.show_sessions = !self.show_sessions,
             _ => {}
         }
     }
@@ -165,7 +168,7 @@ impl App {
     }
 
     pub fn config_item_count(&self) -> usize {
-        6 // theme + 5 panel toggles
+        7 // theme + 6 panel toggles
     }
 
     pub fn config_select_next(&mut self) {
@@ -184,8 +187,9 @@ impl App {
             1 => self.show_context = !self.show_context,
             2 => self.show_quota = !self.show_quota,
             3 => self.show_tokens = !self.show_tokens,
-            4 => self.show_ports = !self.show_ports,
-            5 => self.show_sessions = !self.show_sessions,
+            4 => self.show_projects = !self.show_projects,
+            5 => self.show_ports = !self.show_ports,
+            6 => self.show_sessions = !self.show_sessions,
             _ => {}
         }
     }

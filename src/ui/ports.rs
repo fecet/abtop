@@ -83,6 +83,6 @@ pub(crate) fn draw_ports_panel(f: &mut Frame, app: &App, area: Rect, theme: &The
         )));
     }
 
-    let block = btop_block("ports", "⁴", theme.net_box, theme);
+    let block = btop_block("ports", "⁵", theme.net_box, theme);
     f.render_widget(Paragraph::new(lines).block(block), area);
 }

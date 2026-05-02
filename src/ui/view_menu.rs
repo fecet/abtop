@@ -31,8 +31,9 @@ pub(crate) fn items(app: &App) -> Vec<ViewItem> {
         ViewItem { key: '1', label: "context panel",   state: bool_state(app.show_context) },
         ViewItem { key: '2', label: "quota panel",     state: bool_state(app.show_quota) },
         ViewItem { key: '3', label: "tokens panel",    state: bool_state(app.show_tokens) },
-        ViewItem { key: '4', label: "ports panel",     state: bool_state(app.show_ports) },
-        ViewItem { key: '5', label: "sessions panel",  state: bool_state(app.show_sessions) },
+        ViewItem { key: '4', label: "projects panel",  state: bool_state(app.show_projects) },
+        ViewItem { key: '5', label: "ports panel",     state: bool_state(app.show_ports) },
+        ViewItem { key: '6', label: "sessions panel",  state: bool_state(app.show_sessions) },
         ViewItem { key: 't', label: "cycle theme",     state: Action },
     ]
 }

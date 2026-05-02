@@ -10,7 +10,7 @@ pub(crate) fn draw_config_overlay(f: &mut Frame, app: &App, theme: &Theme) {
     let area = f.area();
 
     let popup_w = 50u16.min(area.width.saturating_sub(4));
-    let popup_h = 14u16.min(area.height.saturating_sub(4));
+    let popup_h = 15u16.min(area.height.saturating_sub(4));
     let x = (area.width.saturating_sub(popup_w)) / 2;
     let y = (area.height.saturating_sub(popup_h)) / 2;
     let popup = Rect::new(x, y, popup_w, popup_h);
@@ -37,8 +37,9 @@ pub(crate) fn draw_config_overlay(f: &mut Frame, app: &App, theme: &Theme) {
         ("Context panel (1)", toggle_str(app.show_context)),
         ("Quota panel (2)", toggle_str(app.show_quota)),
         ("Tokens panel (3)", toggle_str(app.show_tokens)),
-        ("Ports panel (4)", toggle_str(app.show_ports)),
-        ("Sessions panel (5)", toggle_str(app.show_sessions)),
+        ("Projects panel (4)", toggle_str(app.show_projects)),
+        ("Ports panel (5)", toggle_str(app.show_ports)),
+        ("Sessions panel (6)", toggle_str(app.show_sessions)),
     ];
 
     let mut lines = Vec::new();
