@@ -101,7 +101,62 @@ pub fn get_process_info() -> HashMap<u32, ProcInfo> {
     map
 }
 
-#[cfg(not(target_os = "linux"))]
+#[cfg(target_os = "windows")]
+pub fn get_process_info() -> HashMap<u32, ProcInfo> {
+    use std::sync::{Mutex, OnceLock};
+
+    // sysinfo's `cpu_usage()` is a delta between two refreshes — a freshly
+    // constructed `System` always reports 0. Hold one across calls so the
+    // second tick onward returns real CPU%, instead of every Windows process
+    // looking idle (which would break `has_active_descendant` and the
+    // Working/Waiting threshold downstream).
+    static SYS: OnceLock<Mutex<sysinfo::System>> = OnceLock::new();
+    let sys_mutex = SYS.get_or_init(|| Mutex::new(sysinfo::System::new()));
+    let mut sys = sys_mutex.lock().expect("process-info system mutex poisoned");
+
+    sys.refresh_processes_specifics(
+        sysinfo::ProcessesToUpdate::All,
+        true,
+        sysinfo::ProcessRefreshKind::new()
+            .with_cpu()
+            .with_memory()
+            .with_cmd(sysinfo::UpdateKind::OnlyIfNotSet),
+    );
+
+    let mut map = HashMap::new();
+    for (pid, proc_) in sys.processes() {
+        let pid_u32 = pid.as_u32();
+        // cmd() can be empty on Windows (cmdline retrieval failed for this
+        // process); fall back to the executable name so cmd_has_binary still
+        // matches `claude` / `codex` for those processes.
+        let command = if proc_.cmd().is_empty() {
+            proc_.name().to_string_lossy().into_owned()
+        } else {
+            proc_
+                .cmd()
+                .iter()
+                .map(|s| s.to_string_lossy().into_owned())
+                .collect::<Vec<_>>()
+                .join(" ")
+        };
+        if command.is_empty() {
+            continue;
+        }
+        map.insert(
+            pid_u32,
+            ProcInfo {
+                pid: pid_u32,
+                ppid: proc_.parent().map(|p| p.as_u32()).unwrap_or(0),
+                rss_kb: proc_.memory() / 1024,
+                cpu_pct: proc_.cpu_usage() as f64,
+                command,
+            },
+        );
+    }
+    map
+}
+
+#[cfg(all(not(target_os = "linux"), not(target_os = "windows")))]
 pub fn get_process_info() -> HashMap<u32, ProcInfo> {
     let mut map = HashMap::new();
     let output = Command::new("ps")
@@ -228,7 +283,39 @@ pub fn get_listening_ports() -> HashMap<u32, Vec<u16>> {
     map
 }
 
-#[cfg(not(target_os = "linux"))]
+#[cfg(target_os = "windows")]
+pub fn get_listening_ports() -> HashMap<u32, Vec<u16>> {
+    let mut map: HashMap<u32, Vec<u16>> = HashMap::new();
+    let output = Command::new("netstat")
+        .args(["-ano", "-p", "TCP"])
+        .output()
+        .ok();
+
+    if let Some(output) = output {
+        let stdout = String::from_utf8_lossy(&output.stdout);
+        for line in stdout.lines() {
+            if !line.contains("LISTENING") {
+                continue;
+            }
+            let parts: Vec<&str> = line.split_whitespace().collect();
+            let local_addr = parts.first();
+            let pid_str = parts.last();
+            if let (Some(addr), Some(pid_s)) = (local_addr, pid_str) {
+                if let (Some(port_str), Ok(pid)) = (
+                    addr.rsplit(':').next(),
+                    pid_s.parse::<u32>(),
+                ) {
+                    if let Ok(port) = port_str.parse::<u16>() {
+                        map.entry(pid).or_default().push(port);
+                    }
+                }
+            }
+        }
+    }
+    map
+}
+
+#[cfg(all(not(target_os = "linux"), not(target_os = "windows")))]
 pub fn get_listening_ports() -> HashMap<u32, Vec<u16>> {
     let mut map: HashMap<u32, Vec<u16>> = HashMap::new();
     let output = Command::new("lsof")
@@ -258,14 +345,39 @@ pub fn get_listening_ports() -> HashMap<u32, Vec<u16>> {
     map
 }
 
+/// Return the last segment of a path-like string. Splits on `/` everywhere
+/// plus `\` on Windows, so non-Windows callers don't accidentally treat
+/// backslash as a separator (it's a legal filename character on unix).
+pub fn last_path_segment(s: &str) -> Option<&str> {
+    #[cfg(windows)]
+    let segment = s.rsplit(['/', '\\']).next();
+    #[cfg(not(windows))]
+    let segment = s.rsplit('/').next();
+    segment
+}
+
 /// Check if a command string has a given binary name in executable position.
 /// Checks the first two argv tokens only (covers direct invocation and
 /// interpreter-wrapped scripts like `node /path/to/codex ...`).
+#[cfg(not(windows))]
 pub fn cmd_has_binary(cmd: &str, name: &str) -> bool {
     let mut tokens = cmd.split_whitespace().take(2);
     tokens.any(|tok| {
         let base = tok.rsplit('/').next().unwrap_or(tok);
         base == name
+    })
+}
+
+/// Windows variant: also splits on `\`, strips a trailing `.exe`, and matches
+/// case-insensitively. Kept separate from the unix impl so non-Windows
+/// matching stays exact (`Claude` must not match `claude` on linux/macOS).
+#[cfg(windows)]
+pub fn cmd_has_binary(cmd: &str, name: &str) -> bool {
+    let mut tokens = cmd.split_whitespace().take(2);
+    tokens.any(|tok| {
+        let base = tok.rsplit(['/', '\\']).next().unwrap_or(tok);
+        let base = base.strip_suffix(".exe").unwrap_or(base);
+        base.eq_ignore_ascii_case(name)
     })
 }
 
