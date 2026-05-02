@@ -163,7 +163,7 @@ impl CodexCollector {
         let mem_mb = proc.map(|p| p.rss_kb / 1024).unwrap_or(0);
         let display_pid = pid.unwrap_or(0);
 
-        let project_name = result.cwd.rsplit(|c| c == '/' || c == '\\').next().unwrap_or("?").to_string();
+        let project_name = process::last_path_segment(&result.cwd).unwrap_or("?").to_string();
 
         // Status detection
         // Note: Codex interactive sessions emit task_complete after every turn,
@@ -469,7 +469,7 @@ fn parse_codex_tool_arg(arguments: &str) -> String {
 
     for key in ["file_path", "path"] {
         if let Some(raw) = value[key].as_str() {
-            let short = raw.rsplit(|c| c == '/' || c == '\\').next().unwrap_or(raw);
+            let short = process::last_path_segment(raw).unwrap_or(raw);
             return sanitize_tool_arg(short);
         }
     }

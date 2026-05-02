@@ -312,7 +312,7 @@ impl ClaudeCollector {
             return None;
         }
 
-        let project_name = sf.cwd.rsplit(|c| c == '/' || c == '\\').next().unwrap_or("?").to_string();
+        let project_name = process::last_path_segment(&sf.cwd).unwrap_or("?").to_string();
 
         let proc = process_info.get(&sf.pid);
         let mem_mb = proc.map(|p| p.rss_kb / 1024).unwrap_or(0);
@@ -787,14 +787,27 @@ fn map_pid_to_libproc_open_paths(pids: &[u32]) -> HashMap<u32, ProcessOpenPaths>
 
 #[cfg(target_os = "windows")]
 fn map_pid_to_sysinfo_open_paths(pids: &[u32]) -> HashMap<u32, ProcessOpenPaths> {
-    let mut map: HashMap<u32, ProcessOpenPaths> = HashMap::new();
-    let mut sys = sysinfo::System::new();
-    let pids_sys: Vec<sysinfo::Pid> = pids.iter().copied().map(|p| sysinfo::Pid::from(p as usize)).collect();
+    use std::sync::{Mutex, OnceLock};
+
+    static SYS: OnceLock<Mutex<sysinfo::System>> = OnceLock::new();
+    let sys_mutex = SYS.get_or_init(|| Mutex::new(sysinfo::System::new()));
+    let mut sys = sys_mutex.lock().expect("open-paths system mutex poisoned");
+
+    let pids_sys: Vec<sysinfo::Pid> = pids
+        .iter()
+        .copied()
+        .map(|p| sysinfo::Pid::from(p as usize))
+        .collect();
     sys.refresh_processes_specifics(
         sysinfo::ProcessesToUpdate::Some(&pids_sys),
         true,
         sysinfo::ProcessRefreshKind::new().with_memory(),
     );
+
+    // sysinfo 0.32 exposes cwd but not open file descriptors, so the `paths`
+    // fallback used by lsof/libproc on other platforms isn't available here.
+    // Claude session discovery still works via cwd plus the session-file index.
+    let mut map: HashMap<u32, ProcessOpenPaths> = HashMap::new();
     for &pid_u32 in pids {
         let pid = sysinfo::Pid::from(pid_u32 as usize);
         if let Some(proc_) = sys.process(pid) {
@@ -1586,7 +1599,10 @@ fn extract_tool_arg(tool_use: &Value) -> String {
 }
 
 fn shorten_path(path: &str) -> String {
-    let parts: Vec<&str> = path.rsplit(|c| c == '/' || c == '\\').collect();
+    #[cfg(windows)]
+    let parts: Vec<&str> = path.rsplit(['/', '\\']).collect();
+    #[cfg(not(windows))]
+    let parts: Vec<&str> = path.rsplit('/').collect();
     if parts.len() <= 2 {
         path.to_string()
     } else {
@@ -1682,44 +1698,12 @@ fn read_env_var_from_proc(pid: u32, var_name: &str) -> Option<String> {
     parse_environ_var(&data, var_name)
 }
 
-/// Read a single environment variable from a running process on Windows.
-/// Uses PowerShell to query the process environment block via WMI/CIM.
-#[cfg(target_os = "windows")]
-fn read_env_var_from_proc(pid: u32, var_name: &str) -> Option<String> {
-    use std::process::Command;
-    let script = format!(
-        "(Get-CimInstance Win32_Process -Filter 'ProcessId={}').CommandLine",
-        pid
-    );
-    let output = Command::new("powershell")
-        .args(["-NoProfile", "-Command", &script])
-        .output()
-        .ok()?;
-    if !output.status.success() {
-        return None;
-    }
-    let stdout = String::from_utf8_lossy(&output.stdout);
-    let cmd_line = stdout.trim();
-    // Parse CLAUDE_CONFIG_DIR from command line arguments:
-    // Look for --config-dir <path> or similar patterns
-    let args: Vec<&str> = cmd_line.split_whitespace().collect();
-    for i in 0..args.len() {
-        if args[i] == "--config-dir" || args[i] == "--config" {
-            if let Some(val) = args.get(i + 1) {
-                return Some(val.to_string());
-            }
-        }
-        if let Some(val) = args[i].strip_prefix("--config-dir=") {
-            return Some(val.to_string());
-        }
-    }
-    // Fallback: check abtop's own environment (already done in refresh_config_dirs,
-    // but this covers the case where the target process has a different value)
-    std::env::var(var_name).ok()
-}
-
-/// Stub for other non-Linux platforms where /proc is not available.
-#[cfg(all(not(target_os = "linux"), not(target_os = "windows")))]
+/// Stub for non-Linux platforms where /proc is not available.
+/// Windows has no equivalent way to read another process's environment block
+/// without elevated privileges, so per-process `CLAUDE_CONFIG_DIR` overrides
+/// can't be detected — abtop's own env (resolved in `refresh_config_dirs`)
+/// is the only signal there.
+#[cfg(not(target_os = "linux"))]
 fn read_env_var_from_proc(_pid: u32, _var_name: &str) -> Option<String> {
     None
 }
