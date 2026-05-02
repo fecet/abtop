@@ -2105,6 +2105,7 @@ n/Users/bob/.claude-alt/projects/-Users-bob-project/session.jsonl
         );
     }
 
+    #[cfg(unix)]
     #[test]
     fn test_find_session_file_for_pid_rejects_symlinked_session_files() {
         let temp = tempfile::tempdir().unwrap();
@@ -2182,6 +2183,7 @@ n/Users/bob/.claude-alt/projects/-Users-bob-project/session.jsonl
         );
     }
 
+    #[cfg(unix)]
     #[test]
     fn test_resolve_project_dir_rejects_symlinked_matches() {
         let temp = tempfile::tempdir().unwrap();
@@ -2220,6 +2222,7 @@ n/Users/bob/.claude-alt/projects/-Users-bob-project/session.jsonl
         );
     }
 
+    #[cfg(unix)]
     #[test]
     fn test_open_paths_without_cwd_loads_session_from_same_config_root() {
         let temp = tempfile::tempdir().unwrap();
