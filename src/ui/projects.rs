@@ -61,6 +61,6 @@ pub(crate) fn draw_projects_panel(f: &mut Frame, app: &App, area: Rect, theme: &
         )));
     }
 
-    let block = btop_block("projects", "", theme.mem_box, theme);
+    let block = btop_block("projects", "⁴", theme.mem_box, theme);
     f.render_widget(Paragraph::new(lines).block(block), area);
 }

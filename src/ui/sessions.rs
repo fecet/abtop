@@ -11,7 +11,7 @@ use super::{btop_block, fmt_mem_kb, fmt_tokens, grad_at, make_gradient, truncate
 
 pub(crate) fn draw_sessions_panel(f: &mut Frame, app: &App, area: Rect, theme: &Theme) {
     // Render the outer block
-    let block = btop_block("sessions", "⁵", theme.proc_box, theme);
+    let block = btop_block("sessions", "⁶", theme.proc_box, theme);
     f.render_widget(block, area);
 
     let inner = Rect {

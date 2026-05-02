@@ -22,7 +22,7 @@ const ENTRIES: &[(&str, &str)] = &[
     ("  t / T",    "cycle theme / toggle tree"),
     ("  l",        "toggle timeline"),
     ("  f",        "toggle file audit"),
-    ("  1-5",      "toggle panels (context/quota/tokens/ports/sessions)"),
+    ("  1-6",      "toggle panels (context/quota/tokens/projects/ports/sessions)"),
     ("Help", ""),
     ("  ?",        "this help"),
 ];
