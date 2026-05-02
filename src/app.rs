@@ -90,7 +90,11 @@ pub struct App {
 }
 
 impl App {
-    pub fn new_with_hidden(theme: Theme, hidden_agents: &[String]) -> Self {
+    pub fn new_with_config(
+        theme: Theme,
+        hidden_agents: &[String],
+        panels: crate::config::PanelVisibility,
+    ) -> Self {
         let (tx, rx) = mpsc::channel();
         let summaries = load_summary_cache();
         Self {
@@ -111,12 +115,12 @@ impl App {
             status_msg: None,
             kill_confirm: None,
             theme,
-            show_context: true,
-            show_quota: true,
-            show_tokens: true,
-            show_projects: true,
-            show_ports: true,
-            show_sessions: true,
+            show_context: panels.context,
+            show_quota: panels.quota,
+            show_tokens: panels.tokens,
+            show_projects: panels.projects,
+            show_ports: panels.ports,
+            show_sessions: panels.sessions,
             config_open: false,
             config_selected: 0,
             tree_view: false,
@@ -152,7 +156,22 @@ impl App {
             4 => self.show_projects = !self.show_projects,
             5 => self.show_ports = !self.show_ports,
             6 => self.show_sessions = !self.show_sessions,
-            _ => {}
+            _ => return,
+        }
+        self.persist_panel_visibility();
+    }
+
+    fn persist_panel_visibility(&mut self) {
+        let panels = crate::config::PanelVisibility {
+            context: self.show_context,
+            quota: self.show_quota,
+            tokens: self.show_tokens,
+            projects: self.show_projects,
+            ports: self.show_ports,
+            sessions: self.show_sessions,
+        };
+        if let Err(e) = crate::config::save_panel_visibility(&panels) {
+            self.set_status(format!("panels save failed: {}", e));
         }
     }
 
@@ -183,15 +202,19 @@ impl App {
 
     pub fn config_toggle_selected(&mut self) {
         match self.config_selected {
-            0 => self.cycle_theme(),
+            0 => {
+                self.cycle_theme();
+                return;
+            }
             1 => self.show_context = !self.show_context,
             2 => self.show_quota = !self.show_quota,
             3 => self.show_tokens = !self.show_tokens,
             4 => self.show_projects = !self.show_projects,
             5 => self.show_ports = !self.show_ports,
             6 => self.show_sessions = !self.show_sessions,
-            _ => {}
+            _ => return,
         }
+        self.persist_panel_visibility();
     }
 
     pub fn toggle_timeline(&mut self) {
