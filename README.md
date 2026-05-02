@@ -3,7 +3,7 @@
 **Like [btop](https://github.com/aristocratos/btop), but for your AI coding agents.**
 
 See every Claude Code and Codex CLI session at a glance — token usage, context window %, rate limits, child processes, open ports, and more.
-Claude Code and Codex CLI sessions are discovered from local process/file state, so multiple active profiles are supported across macOS and Linux.
+Claude Code and Codex CLI sessions are discovered from local process/file state, so multiple active profiles are supported across macOS, Linux, and Windows.
 
 ![demo](https://raw.githubusercontent.com/graykode/abtop/main/assets/demo.gif)
 
@@ -32,7 +32,7 @@ cargo install abtop
 
 ### Windows
 
-**Native support** — no WSL required! Uses `sysinfo` for process discovery and `netstat -ano` for ports. All core features work out of the box.
+Native support — no WSL required. Uses `sysinfo` for process info and `netstat -ano` for listening ports.
 
 ```powershell
 powershell -c "irm https://github.com/graykode/abtop/releases/latest/download/abtop-installer.ps1 | iex"
