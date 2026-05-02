@@ -1,6 +1,6 @@
 [package]
 name = "abtop"
-version = "0.3.9"
+version = "0.3.8"
 edition = "2021"
 rust-version = "1.88"
 description = "AI agent monitor for your terminal"
@@ -14,8 +14,8 @@ authors = ["Tae Hwan Jung <nlkey2022@gmail.com>"]
 exclude = ["assets/*", "assets/**/*"]
 
 [dependencies]
-ratatui = "0.30.0"
-crossterm = "0.29.0"
+ratatui = "0.29"
+crossterm = "0.28"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 dirs = "6"
@@ -25,11 +25,11 @@ tempfile = "3"
 [target.'cfg(target_vendor = "apple")'.dependencies]
 proc_pidinfo = "0.1"
 
+[target.'cfg(target_os = "windows")'.dependencies]
+sysinfo = "0.32"
+
 [target.'cfg(target_os = "linux")'.dependencies]
 libc = "0.2"
-
-[target.'cfg(target_os = "windows")'.dependencies]
-sysinfo = "0.38.4"
 
 # The profile that 'dist' will build with
 [profile.dist]

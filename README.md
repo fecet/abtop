@@ -40,15 +40,6 @@ powershell -c "irm https://github.com/graykode/abtop/releases/latest/download/ab
 
 Or `cargo install abtop` from any terminal with Git in PATH. Claude Code config is resolved automatically from `%USERPROFILE%\.claude`.
 
-### Arch Linux (AUR)
-
-```bash
-# Using an AUR helper
-yay -S abtop
-# Or manually with the PKGBUILD in the repo root
-makepkg -si
-```
-
 ### Other
 
 Pre-built binaries for all platforms are available on the [GitHub Releases](https://github.com/graykode/abtop/releases) page.
