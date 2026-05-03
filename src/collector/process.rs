@@ -368,12 +368,12 @@ pub fn last_path_segment(s: &str) -> Option<&str> {
 pub fn cmd_has_binary(cmd: &str, name: &str) -> bool {
     let mut tokens = cmd.split_whitespace().take(2);
     tokens.any(|tok| {
-        let base = tok.rsplit('/').next().unwrap_or(tok);
+        let mut iter = tok.rsplit('/');
+        let base = iter.next().unwrap_or(tok);
         if base == name {
             return true;
         }
-        let parts: Vec<&str> = tok.rsplit('/').collect();
-        parts.len() >= 3 && parts[1] == "versions" && parts[2] == name
+        matches!((iter.next(), iter.next()), (Some("versions"), Some(parent)) if parent == name)
     })
 }
 
@@ -384,15 +384,17 @@ pub fn cmd_has_binary(cmd: &str, name: &str) -> bool {
 pub fn cmd_has_binary(cmd: &str, name: &str) -> bool {
     let mut tokens = cmd.split_whitespace().take(2);
     tokens.any(|tok| {
-        let base = tok.rsplit(['/', '\\']).next().unwrap_or(tok);
+        let mut iter = tok.rsplit(['/', '\\']);
+        let base = iter.next().unwrap_or(tok);
         let base = base.strip_suffix(".exe").unwrap_or(base);
         if base.eq_ignore_ascii_case(name) {
             return true;
         }
-        let parts: Vec<&str> = tok.rsplit(['/', '\\']).collect();
-        parts.len() >= 3
-            && parts[1].eq_ignore_ascii_case("versions")
-            && parts[2].eq_ignore_ascii_case(name)
+        matches!(
+            (iter.next(), iter.next()),
+            (Some(versions), Some(parent))
+                if versions.eq_ignore_ascii_case("versions") && parent.eq_ignore_ascii_case(name)
+        )
     })
 }
 
